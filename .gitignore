@@ -1,4 +1,11 @@
+# Compiled Releases
 bin/
 obj/
 *.user
+
+# Development Environments
 .vs/
+.vscode/
+
+# Other Files
+other/

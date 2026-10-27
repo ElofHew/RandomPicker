@@ -3,7 +3,9 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using Avalonia.Threading;
+using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Models.Notification;
 using ClassIsland.RandomPicker.Models;
 using ClassIsland.RandomPicker.Views;
@@ -31,6 +33,14 @@ public class PickerHostService : IHostedService
 
     /// <summary>上一条还在播的提醒。连着抽人时先把它取消掉，免得在主界面上排队堆积。</summary>
     private NotificationRequest? _lastRequest;
+
+    /// <summary>托盘菜单里那条「显示/隐藏悬浮窗」。</summary>
+    private NativeMenuItem? _trayItem;
+
+    /// <summary>托盘菜单还没建好时的重试定时器。</summary>
+    private DispatcherTimer? _trayRetryTimer;
+
+    private int _trayRetryCount;
 
     public PickerHostService(string pluginConfigFolder)
     {
@@ -63,7 +73,11 @@ public class PickerHostService : IHostedService
 
         // 宿主启动 IHostedService 的时候 Avalonia 主窗口不一定已经就绪，
         // 用 Background 优先级排队，等 UI 空下来再开窗口。
-        Dispatcher.UIThread.Post(ShowPickerWindow, DispatcherPriority.Background);
+        Dispatcher.UIThread.Post(() =>
+        {
+            EnsureTrayMenuItem();
+            ShowPickerWindow();
+        }, DispatcherPriority.Background);
         return Task.CompletedTask;
     }
 
@@ -72,6 +86,7 @@ public class PickerHostService : IHostedService
         SaveSettingsInternal();
         Dispatcher.UIThread.Post(() =>
         {
+            RemoveTrayMenuItem();
             RevealWindow.CloseCurrent();
             _window?.Close();
             _window = null;
@@ -88,18 +103,156 @@ public class PickerHostService : IHostedService
             return;
         }
 
+        // 上一次是被用户主动藏起来的，别自己冒出来 —— 等托盘菜单或设置页叫回来。
+        if (_settings.Hidden)
+        {
+            return;
+        }
+
         _window = new PickerWindow(_settings, _roster);
         _window.PickRequested += (_, _) => Pick();
         _window.SettingsChanged += (_, _) => SaveSettingsInternal();
-        _window.HideRequested += (_, _) =>
-        {
-            RevealWindow.CloseCurrent();
-            _window?.Hide();
-            // 藏起来之后还能从「设置 → 提醒 → 随机抽选」那边知道插件还在，
-            // 想叫回来重启 ClassIsland 就行。
-        };
+        _window.HideRequested += (_, _) => SetPickerWindowVisible(false);
         _window.Show();
     }
+
+    #region 显示 / 隐藏
+
+    /// <summary>
+    /// 显示或隐藏悬浮窗，并把状态记进设置（会存盘）。
+    /// </summary>
+    /// <remarks>
+    /// 隐藏时<b>不销毁窗口实例</b>，只是 <see cref="Window.Hide()"/>。
+    /// 这样再显示回来时位置、置顶定时器、名单状态全都在，不会有「重新出现但挪了地方」的割裂感。
+    /// <para/>
+    /// 隐藏状态是持久的：重启 ClassIsland 也保持隐藏，不用每次开机再点一次。
+    /// </remarks>
+    public void SetPickerWindowVisible(bool visible)
+    {
+        _settings.Hidden = !visible;
+
+        if (visible)
+        {
+            if (_window is null)
+            {
+                ShowPickerWindow();
+            }
+            else if (!_window.IsVisible)
+            {
+                _window.Show();
+            }
+        }
+        else
+        {
+            // 中央大字那个窗口是独立实例，悬浮窗没了它也没道理继续占着屏幕。
+            RevealWindow.CloseCurrent();
+            // 先存位置再隐藏：藏起来之后窗口位置可能就取不到有效值了。
+            _window?.CapturePosition();
+            _window?.Hide();
+        }
+
+        SaveSettingsInternal();
+        RefreshTrayMenuItem();
+    }
+
+    /// <summary>
+    /// 往宿主托盘菜单的「更多选项」里加一条「显示 / 隐藏悬浮窗」。
+    /// </summary>
+    /// <remarks>
+    /// 悬浮窗藏起来之后就没有任何入口能把它叫回来了，所以必须在宿主托盘菜单里留一条。
+    /// <para/>
+    /// <see cref="ITaskBarIconService.MoreOptionsMenuItems"/> 背后是 <c>MoreOptionsMenu!.Items</c>，
+    /// 而那个菜单要等宿主的 MainWindow 构造完才存在，取一次会直接抛空引用。
+    /// 插件有可能比它先起来，所以加不上就隔一秒重试，最多试半分钟。
+    /// </remarks>
+    private void EnsureTrayMenuItem()
+    {
+        if (_trayItem is not null)
+        {
+            return;
+        }
+
+        var service = IAppHost.Host?.Services.GetService<ITaskBarIconService>();
+        if (service is null)
+        {
+            return;
+        }
+
+        _trayItem = new NativeMenuItem();
+        _trayItem.Click += (_, _) => SetPickerWindowVisible(_settings.Hidden);
+
+        if (TryAddTrayMenuItem(service))
+        {
+            return;
+        }
+
+        _trayRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _trayRetryTimer.Tick += (_, _) =>
+        {
+            if (TryAddTrayMenuItem(service) || ++_trayRetryCount >= 30)
+            {
+                _trayRetryTimer?.Stop();
+                _trayRetryTimer = null;
+            }
+        };
+        _trayRetryTimer.Start();
+    }
+
+    private bool TryAddTrayMenuItem(ITaskBarIconService service)
+    {
+        if (_trayItem is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            service.MoreOptionsMenuItems.Add(_trayItem);
+            RefreshTrayMenuItem();
+            return true;
+        }
+        catch (Exception)
+        {
+            // 宿主的「更多选项」菜单还没建好，过一会儿再试。
+            return false;
+        }
+    }
+
+    private void RemoveTrayMenuItem()
+    {
+        _trayRetryTimer?.Stop();
+        _trayRetryTimer = null;
+
+        if (_trayItem is null)
+        {
+            return;
+        }
+
+        try
+        {
+            IAppHost.Host?.Services.GetService<ITaskBarIconService>()
+                ?.MoreOptionsMenuItems.Remove(_trayItem);
+        }
+        catch (Exception)
+        {
+            // 宿主已经在关了，菜单没了也无所谓。
+        }
+
+        _trayItem = null;
+    }
+
+    /// <summary>托盘菜单那一项的文字跟着当前状态走：藏起来了就写「显示悬浮窗」。</summary>
+    private void RefreshTrayMenuItem()
+    {
+        if (_trayItem is null)
+        {
+            return;
+        }
+
+        _trayItem.Header = _settings.Hidden ? "显示悬浮窗" : "隐藏悬浮窗";
+    }
+
+    #endregion
 
     private void SaveSettingsInternal()
     {

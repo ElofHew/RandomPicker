@@ -9,6 +9,14 @@
             <TextBlock Classes="l-instructive" TextWrapping="Wrap"
                        Text="日常操作在悬浮窗右键菜单。此页配置拍照抽人：拍摄合影，从中随机抽取一人。"/>
 
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE812;}"
+                                       Header="显示悬浮窗"
+                                       Description="{Binding PickerVisibleText}">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding PickerVisible, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
             <Separator Margin="0 12 0 4"/>
             <ci:IconText Glyph="&#xE8A5;" Text="名单" Margin="0 0 0 4"/>
 

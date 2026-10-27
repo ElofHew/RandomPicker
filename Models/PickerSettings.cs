@@ -45,6 +45,16 @@ public class PickerSettings
 
     public PickerSize Size { get; set; } = PickerSize.Medium;
 
+    /// <summary>
+    /// 悬浮窗是否被用户藏起来了。
+    /// </summary>
+    /// <remarks>
+    /// 藏起来只是把窗口 <c>Hide()</c>，实例仍然留着，随时能叫回来。
+    /// 这个状态<b>会存盘</b>：重启 ClassIsland 之后仍然保持隐藏，不用每次开机再点一次。
+    /// 叫回来的路有两条：托盘菜单「更多选项 → 显示悬浮窗」，或者应用设置里的这一页。
+    /// </remarks>
+    public bool Hidden { get; set; }
+
     /// <summary>是否在屏幕中央弹出大字。</summary>
     public bool ShowCenterReveal { get; set; } = true;
 

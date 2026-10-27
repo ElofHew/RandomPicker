@@ -266,6 +266,10 @@ public class PickerWindow : Window
         ClampToScreen();
         ApplyAccent();
 
+        // OnOpened 每次 Show() 都会跑一遍（隐藏之后再显示会再跑一次），
+        // 所以先 Dispose 掉上一轮那个，否则置顶定时器会一个叠一个，
+        // 每个都在对着同一个窗口句柄调用 SetWindowPos。
+        _topmost?.Dispose();
         _topmost = new TopmostEnforcer(this);
         _topmost.Attach();
     }
@@ -306,6 +310,14 @@ public class PickerWindow : Window
     /// <summary>把当前位置写回设置。</summary>
     public void CapturePosition()
     {
+        // 隐藏期间不要写。藏起来之后窗口位置有可能已经失效，
+        // 这时候存进去，下次显示回来悬浮钮就会跳到别的地方去。
+        // 正确的位置在 Hide() 之前就已经存好了。
+        if (!IsVisible)
+        {
+            return;
+        }
+
         _settings.WindowX = Position.X;
         _settings.WindowY = Position.Y;
     }

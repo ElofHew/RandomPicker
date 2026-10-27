@@ -56,6 +56,31 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
 
+    #region 悬浮窗
+
+    /// <summary>
+    /// 悬浮窗是否显示。
+    /// </summary>
+    /// <remarks>
+    /// 藏起来之后正常是从托盘菜单「更多选项 → 显示悬浮窗」叫回来。这里留第二条路，
+    /// 免得托盘菜单万一没注册上时，用户彻底找不到把悬浮窗叫回来的入口。
+    /// </remarks>
+    public bool PickerVisible
+    {
+        get => !Settings.Hidden;
+        set
+        {
+            _service?.SetPickerWindowVisible(value);
+            Raise(nameof(PickerVisible), nameof(PickerVisibleText));
+        }
+    }
+
+    public string PickerVisibleText => Settings.Hidden
+        ? "已隐藏。可在托盘菜单「更多选项 → 显示悬浮窗」叫回来。"
+        : "正在显示。隐藏后不会自己冒出来，重启也保持隐藏。";
+
+    #endregion
+
     #region 名单
 
     public string RosterSummary => _service is null

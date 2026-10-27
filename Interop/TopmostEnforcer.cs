@@ -115,6 +115,15 @@ public sealed class TopmostEnforcer : IDisposable
             return;
         }
 
+        // 窗口被藏起来的时候绝对不要顶。SetWindowPos 的 SWP_SHOWWINDOW 会把已经
+        // Hide() 掉的原生窗口重新显示出来：屏幕上又出现了，但 Avalonia 这边仍认为它是
+        // 隐藏的 —— 看得见、点不着、也关不掉，就是那个「幽灵控件」。
+        // 所以隐藏期间直接跳过，等 Show() 回来之后定时器自然恢复重申。
+        if (!_window.IsVisible)
+        {
+            return;
+        }
+
         var yield = !_exclusive && ExclusiveOverlay.IsActive;
         if (yield && _yielded)
         {

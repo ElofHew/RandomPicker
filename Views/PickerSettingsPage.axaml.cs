@@ -62,7 +62,7 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
     /// 悬浮窗是否显示。
     /// </summary>
     /// <remarks>
-    /// 藏起来之后正常是从托盘菜单「更多选项 → 显示悬浮窗」叫回来。这里留第二条路，
+    /// 藏起来之后正常是从托盘菜单「更多选项 → 显示抽选悬浮球」叫回来。这里留第二条路，
     /// 免得托盘菜单万一没注册上时，用户彻底找不到把悬浮窗叫回来的入口。
     /// </remarks>
     public bool PickerVisible
@@ -76,7 +76,7 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
     }
 
     public string PickerVisibleText => Settings.Hidden
-        ? "已隐藏。可在托盘菜单「更多选项 → 显示悬浮窗」叫回来。"
+        ? "已隐藏。可在托盘菜单「更多选项 → 显示抽选悬浮球」叫回来。"
         : "正在显示。隐藏后不会自己冒出来，重启也保持隐藏。";
 
     #endregion

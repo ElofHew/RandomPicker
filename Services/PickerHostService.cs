@@ -34,7 +34,7 @@ public class PickerHostService : IHostedService
     /// <summary>上一条还在播的提醒。连着抽人时先把它取消掉，免得在主界面上排队堆积。</summary>
     private NotificationRequest? _lastRequest;
 
-    /// <summary>托盘菜单里那条「显示/隐藏悬浮窗」。</summary>
+    /// <summary>托盘菜单里那条「显示 / 隐藏抽选悬浮球」。</summary>
     private NativeMenuItem? _trayItem;
 
     /// <summary>托盘菜单还没建好时的重试定时器。</summary>
@@ -126,6 +126,8 @@ public class PickerHostService : IHostedService
     /// 这样再显示回来时位置、置顶定时器、名单状态全都在，不会有「重新出现但挪了地方」的割裂感。
     /// <para/>
     /// 隐藏状态是持久的：重启 ClassIsland 也保持隐藏，不用每次开机再点一次。
+    /// <para/>
+    /// 托盘菜单那一项的标题见 <see cref="RefreshTrayMenuItem"/>。
     /// </remarks>
     public void SetPickerWindowVisible(bool visible)
     {
@@ -156,7 +158,7 @@ public class PickerHostService : IHostedService
     }
 
     /// <summary>
-    /// 往宿主托盘菜单的「更多选项」里加一条「显示 / 隐藏悬浮窗」。
+    /// 往宿主托盘菜单的「更多选项」里加一条「显示 / 隐藏抽选悬浮球」。
     /// </summary>
     /// <remarks>
     /// 悬浮窗藏起来之后就没有任何入口能把它叫回来了，所以必须在宿主托盘菜单里留一条。
@@ -241,7 +243,12 @@ public class PickerHostService : IHostedService
         _trayItem = null;
     }
 
-    /// <summary>托盘菜单那一项的文字跟着当前状态走：藏起来了就写「显示悬浮窗」。</summary>
+    /// <summary>托盘菜单那一项的文字跟着当前状态走：藏起来了就写「显示抽选悬浮球」。</summary>
+    /// <remarks>
+    /// 标题里必须带「抽选」两个字。SystemTools 等插件也会往同一个「更多选项」菜单里塞
+    /// 「显示悬浮窗 / 隐藏悬浮窗」，那是它们自己的悬浮窗，跟本插件无关；
+    /// 两边都叫「隐藏悬浮窗」时用户分不清哪个管哪个。
+    /// </remarks>
     private void RefreshTrayMenuItem()
     {
         if (_trayItem is null)
@@ -249,7 +256,7 @@ public class PickerHostService : IHostedService
             return;
         }
 
-        _trayItem.Header = _settings.Hidden ? "显示悬浮窗" : "隐藏悬浮窗";
+        _trayItem.Header = _settings.Hidden ? "显示抽选悬浮球" : "隐藏抽选悬浮球";
     }
 
     #endregion

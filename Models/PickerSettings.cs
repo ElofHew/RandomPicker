@@ -23,7 +23,28 @@ public enum PickMode
     /// <remarks>
     /// 和名单无关——抽的是照片里的人，不是名字。检测不到人脸时会退回按名单抽。
     /// </remarks>
-    Photo
+    Photo,
+
+    /// <summary>
+    /// 随机抽一个小组，比如「C 组」。
+    /// </summary>
+    /// <remarks>
+    /// 抽的是<b>组的标签</b>，不是名单里的人。组有几组、用字母还是数字，
+    /// 由 <see cref="PickerSettings.GroupCount"/> 和 <see cref="PickerSettings.GroupStyle"/> 决定。
+    /// </remarks>
+    Group
+}
+
+/// <summary>
+/// 抽组时的组名写法。
+/// </summary>
+public enum GroupStyle
+{
+    /// <summary>A 组、B 组、C 组……最多到 Z 组。</summary>
+    Letter,
+
+    /// <summary>1 组、2 组、3 组……</summary>
+    Number
 }
 
 /// <summary>
@@ -44,16 +65,27 @@ public class PickerSettings
     public PickMode Mode { get; set; } = PickMode.NoRepeat;
 
     /// <summary>
-    /// 「随机抽人」用的抽取模式：<see cref="PickMode.NoRepeat"/> = 不放回，
-    /// <see cref="PickMode.Random"/> = 放回。
+    /// 放回 / 不放回。<see cref="PickMode.NoRepeat"/> = 不放回，<see cref="PickMode.Random"/> = 放回。
     /// </summary>
     /// <remarks>
-    /// 拍照（<see cref="PickMode.Photo"/>）抽的是照片里的人脸，没有「放回 / 不放回」可言；
-    /// 但这个值<b>照样记着</b>，切回「随机抽人」时按它恢复，不用重新选一遍。
-    /// <para/>
-    /// 约定：只要 <see cref="Mode"/> 不是拍照，两者就相等（<see cref="Load"/> 里会兜一下）。
+    /// 名单和抽组共用这一个设定：
+    /// <list type="bullet">
+    /// <item>「随机抽人」时它就是 <see cref="Mode"/> 本身；</item>
+    /// <item>「随机抽组」时 <see cref="Mode"/> 是 <see cref="PickMode.Group"/>，这个值决定组要不要放回；</item>
+    /// <item>拍照没有放回可言，但这个值<b>照样记着</b>，切回来时按它恢复。</item>
+    /// </list>
+    /// 判断「当前是不是不放回」一律走 <see cref="IsNoRepeat"/>，别自己拿 <see cref="Mode"/> 比。
     /// </remarks>
     public PickMode TextMode { get; set; } = PickMode.NoRepeat;
+
+    /// <summary>当前是不是「不放回」。名单、抽组、拍照三种来源统一看这个。</summary>
+    [JsonIgnore]
+    public bool IsNoRepeat => Mode switch
+    {
+        PickMode.NoRepeat => true,
+        PickMode.Group => TextMode == PickMode.NoRepeat,
+        _ => false
+    };
 
     /// <summary>
     /// 一次抽几个人。菜单里给的是 1 / 2 / 3。
@@ -63,6 +95,27 @@ public class PickerSettings
     /// 实际能抽到的人数会被名单长度 / 检出的人脸数卡住，抽不出那么多就少给几个。
     /// </remarks>
     public int PickCount { get; set; } = 1;
+
+    #region 抽组
+
+    /// <summary>小组总数的上限。26 是字母写法的天花板（A ~ Z）。</summary>
+    public const int MaxGroups = 26;
+
+    /// <summary>组名用字母还是数字。</summary>
+    public GroupStyle GroupStyle { get; set; } = GroupStyle.Letter;
+
+    /// <summary>
+    /// 一共分几个组。1 ~ 26——上限 26 是因为字母写法只到 Z。
+    /// </summary>
+    public int GroupCount { get; set; } = 6;
+
+    /// <summary>「不放回」模式下本轮已经抽到过的组。</summary>
+    public List<string> DrawnGroupsThisRound { get; set; } = new();
+
+    /// <summary>上一次抽到的组，用于放回模式回避连着抽到同一个。</summary>
+    public string? LastGroupPicked { get; set; }
+
+    #endregion
 
     public PickerSize Size { get; set; } = PickerSize.Medium;
 
@@ -188,39 +241,46 @@ public class PickerSettings
     #region 模式切换
 
     /// <summary>
-    /// 切换抽人来源：拍照（从合影里挑人脸）还是随机抽人（从名单里抽）。
+    /// 切换抽人来源：拍照（从合影里挑人脸）、随机抽人（从名单里抽）、随机抽组。
     /// </summary>
+    /// <param name="source">
+    /// <see cref="PickMode.Photo"/> / <see cref="PickMode.Group"/> 直接切过去；
+    /// 传别的（比如 <see cref="TextMode"/>）表示切回「随机抽人」。
+    /// </param>
     /// <remarks>
     /// 切回「随机抽人」时用 <see cref="TextMode"/> 恢复，不然用户当初选的「不放回」会被忘掉。
     /// 悬浮球右键菜单和设置页都调这里，免得两边各写一套、慢慢走样。
     /// </remarks>
-    public void SetSource(bool photo)
+    public void SetSource(PickMode source)
     {
-        if (photo)
+        if (source is PickMode.Photo or PickMode.Group)
         {
-            Mode = PickMode.Photo;
+            Mode = source;
             return;
         }
 
-        Mode = TextMode == PickMode.Photo ? PickMode.NoRepeat : TextMode;
+        Mode = TextMode is PickMode.Random or PickMode.NoRepeat ? TextMode : PickMode.NoRepeat;
     }
 
     /// <summary>
-    /// 设置「随机抽人」的放回 / 不放回。
+    /// 设置放回 / 不放回。名单和抽组共用。
     /// </summary>
     /// <remarks>
-    /// 当前就在随机抽人时立刻生效；在拍照模式下只是先记下来
-    /// （拍照没有放回可言），切回随机抽人时自动按它恢复。
+    /// 当前是名单或抽组时立刻生效；拍照模式下只是先记下来
+    /// （拍照没有放回可言），切回来时自动按它恢复。
     /// </remarks>
     public void SetReplace(PickMode mode)
     {
-        if (mode == PickMode.Photo)
+        if (mode is not (PickMode.Random or PickMode.NoRepeat))
         {
             return;
         }
 
         TextMode = mode;
-        if (Mode != PickMode.Photo)
+
+        // 只有当前正好是「名单」来源时才改 Mode——抽组时 Mode 得留在 Group，
+        // 拍照时更要原样不动。
+        if (Mode is PickMode.Random or PickMode.NoRepeat)
         {
             Mode = mode;
         }
@@ -263,12 +323,18 @@ public class PickerSettings
     /// </remarks>
     private static PickerSettings Normalize(PickerSettings s)
     {
-        if (s.TextMode == PickMode.Photo || (s.Mode != PickMode.Photo && s.TextMode != s.Mode))
+        // 老配置里没有 TextMode，也可能是脏值。TextMode 只允许「放回 / 不放回」两个值，
+        // 而名单来源下它必须和 Mode 一致。
+        var textModeValid = s.TextMode is PickMode.Random or PickMode.NoRepeat;
+        var modeIsText = s.Mode is PickMode.Random or PickMode.NoRepeat;
+
+        if (!textModeValid || (modeIsText && s.TextMode != s.Mode))
         {
-            s.TextMode = s.Mode == PickMode.Photo ? PickMode.NoRepeat : s.Mode;
+            s.TextMode = modeIsText ? s.Mode : PickMode.NoRepeat;
         }
 
         s.PickCount = Math.Clamp(s.PickCount, 1, 3);
+        s.GroupCount = Math.Clamp(s.GroupCount, 1, MaxGroups);
         return s;
     }
 

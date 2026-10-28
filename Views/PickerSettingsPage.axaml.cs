@@ -110,30 +110,43 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
 
     #region 抽人
 
-    public List<string> SourceNames { get; } = ["随机抽人", "拍照抽人"];
+    public List<string> SourceNames { get; } = ["拍照抽人", "随机抽人", "随机抽组"];
 
-    public List<string> CountNames { get; } = ["1 人", "2 人", "3 人"];
+    public List<string> CountNames { get; } = ["1 个", "2 个", "3 个"];
 
     public List<string> ReplaceNames { get; } = ["不放回", "放回"];
 
-    /// <summary>抽人来源。0 = 随机抽人，1 = 拍照抽人。</summary>
+    /// <summary>抽人来源。0 = 拍照抽人，1 = 随机抽人，2 = 随机抽组。</summary>
     public int SourceIndex
     {
-        get => Settings.Mode == PickMode.Photo ? 1 : 0;
+        get => Settings.Mode switch
+        {
+            PickMode.Photo => 0,
+            PickMode.Group => 2,
+            _ => 1
+        };
         set
         {
-            Settings.SetSource(value == 1);
+            Settings.SetSource(value switch
+            {
+                0 => PickMode.Photo,
+                2 => PickMode.Group,
+                _ => Settings.TextMode
+            });
             _service?.RefreshPickerWindow();
             // 只通知真正变了的：抽取模式的值不受来源影响，跟着一起通知会让下拉框来回写。
-            Save(nameof(SourceIndex), nameof(SourceSummary));
+            Save(nameof(SourceIndex), nameof(SourceSummary), nameof(RoundSummary));
         }
     }
 
-    public string SourceSummary => Settings.Mode == PickMode.Photo
-        ? "从摄像头拍的合影里挑人脸，裁出人像。"
-        : "从名单里抽名字。";
+    public string SourceSummary => Settings.Mode switch
+    {
+        PickMode.Photo => "从摄像头拍的合影里挑人脸，裁出人像。",
+        PickMode.Group => "从小组里随机抽一个，比如「C 组」。小组不读名单，按下面的分组设置算出来。",
+        _ => "从名单里抽名字。"
+    };
 
-    /// <summary>一次抽几个人。</summary>
+    /// <summary>一次抽几个。</summary>
     public int PickCountIndex
     {
         get => Math.Clamp(Settings.PickCount, 1, 3) - 1;
@@ -145,8 +158,8 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
     }
 
     public string CountSummary => Settings.PickCount <= 1
-        ? "一次抽一个人。"
-        : $"一次抽 {Settings.PickCount} 个人，同一批内不会重复。";
+        ? "一次抽一个。"
+        : $"一次抽 {Settings.PickCount} 个，同一批内不会重复。";
 
     /// <summary>放回 / 不放回。0 = 不放回，1 = 放回。</summary>
     public int ReplaceIndex
@@ -161,8 +174,8 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
     }
 
     public string ReplaceSummary => Settings.TextMode == PickMode.NoRepeat
-        ? "抽到的人本轮不再出现，抽完一轮自动开始新一轮。"
-        : "每次都从全部名单里抽，只回避和上一次同一个人。";
+        ? "抽过的不再出现，抽完一轮自动开始新一轮。名单和小组共用这个设定。"
+        : "每次都从全部里抽，只回避和上一次相同。名单和小组共用这个设定。";
 
     public string RoundSummary
     {
@@ -173,9 +186,78 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
                 return "清空本轮记录。";
             }
 
-            return Settings.TextMode == PickMode.NoRepeat
+            if (Settings.Mode == PickMode.Group)
+            {
+                return Settings.IsNoRepeat
+                    ? $"共 {_service.GroupTotal} 组，本轮还剩 {_service.GroupsRemaining} 组。"
+                    : $"共 {_service.GroupTotal} 组。放回模式下没有轮次概念。";
+            }
+
+            return Settings.IsNoRepeat
                 ? $"共 {_service.RosterCount} 人，本轮还剩 {_service.RemainingInRound} 人。"
                 : $"共 {_service.RosterCount} 人。放回模式下没有轮次概念。";
+        }
+    }
+
+    #endregion
+
+    #region 抽组
+
+    public List<string> GroupStyleNames { get; } = ["字母", "数字"];
+
+    /// <summary>分组方式。0 = 字母（A 组…），1 = 数字（1 组…）。</summary>
+    public int GroupStyleIndex
+    {
+        get => Settings.GroupStyle == GroupStyle.Letter ? 0 : 1;
+        set
+        {
+            var style = value == 1 ? GroupStyle.Number : GroupStyle.Letter;
+            if (style == Settings.GroupStyle)
+            {
+                return;
+            }
+
+            Settings.GroupStyle = style;
+            // 换写法等于换了一批标签，「1 组」和「A 组」不是同一个组，本轮记录作废。
+            GroupPicker.ResetRound(Settings);
+            _service?.RefreshPickerWindow();
+            Save(nameof(GroupStyleIndex), nameof(GroupStyleSummary), nameof(GroupSummary),
+                nameof(RoundSummary));
+        }
+    }
+
+    public string GroupStyleSummary => "组名写成「A 组、B 组」还是「1 组、2 组」。改完本轮抽组记录会清空。";
+
+    /// <summary>小组总数，1 ~ 26。</summary>
+    public double GroupCount
+    {
+        get => Settings.GroupCount;
+        set
+        {
+            var count = Math.Clamp((int)Math.Round(value), 1, PickerSettings.MaxGroups);
+            if (count == Settings.GroupCount)
+            {
+                return;
+            }
+
+            Settings.GroupCount = count;
+            GroupPicker.ResetRound(Settings);
+            _service?.RefreshPickerWindow();
+            Save(nameof(GroupCount), nameof(GroupCountText), nameof(GroupSummary), nameof(RoundSummary));
+        }
+    }
+
+    public string GroupCountText => $"{Settings.GroupCount} 组";
+
+    /// <summary>把实际的组名列出来，一眼看出设置成什么样了。</summary>
+    public string GroupSummary
+    {
+        get
+        {
+            var labels = GroupPicker.Labels(Settings);
+            const int show = 6;
+            var head = string.Join("、", labels.Take(show));
+            return labels.Count > show ? $"{head} …" : head;
         }
     }
 

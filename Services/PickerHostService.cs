@@ -268,6 +268,12 @@ public class PickerHostService : IHostedService
     /// <summary>本轮还剩多少人没抽到。放回模式下没有轮次概念，等于总人数。</summary>
     public int RemainingInRound => _roster?.RemainingInRound(_settings) ?? 0;
 
+    /// <summary>一共分几个组。由设置里的「小组总数」决定。</summary>
+    public int GroupTotal => GroupPicker.Labels(_settings).Count;
+
+    /// <summary>本轮还剩几个组没抽到。放回模式下等于总组数。</summary>
+    public int GroupsRemaining => GroupPicker.RemainingInRound(_settings);
+
     /// <summary>重新读一遍名单文件。</summary>
     public void ReloadRoster()
     {
@@ -275,10 +281,11 @@ public class PickerHostService : IHostedService
         _window?.RefreshCounter();
     }
 
-    /// <summary>清空本轮记录，提前开始新一轮。</summary>
+    /// <summary>清空本轮记录，提前开始新一轮。名单和小组一起清。</summary>
     public void ResetRound()
     {
         RosterService.ResetRound(_settings);
+        GroupPicker.ResetRound(_settings);
         _window?.RefreshCounter();
         SaveSettingsInternal();
     }
@@ -328,7 +335,43 @@ public class PickerHostService : IHostedService
             return;
         }
 
+        if (_settings.Mode == PickMode.Group)
+        {
+            PickFromGroups();
+            return;
+        }
+
         PickFromRoster();
+    }
+
+    /// <summary>
+    /// 抽组：随机挑一个小组，比如「C 组」。
+    /// </summary>
+    /// <remarks>
+    /// 组不是名单，所以这里既不读文件也不碰人。抽几个、要不要放回，
+    /// 跟抽人共用同一套设置（<see cref="PickerSettings.PickCount"/> / <see cref="PickerSettings.IsNoRepeat"/>）。
+    /// </remarks>
+    private void PickFromGroups()
+    {
+        var groups = GroupPicker.PickMany(_settings, PickCount);
+        SaveSettingsInternal();
+        _window?.RefreshCounter();
+
+        if (groups.Count == 0)
+        {
+            Reveal("没有可抽的小组", isHint: true);
+            return;
+        }
+
+        if (_settings.ShowCenterReveal)
+        {
+            Reveal(string.Join('\n', groups), isHint: false);
+        }
+
+        if (_settings.ShowNotification)
+        {
+            SendNotification(string.Join("、", groups));
+        }
     }
 
     /// <summary>

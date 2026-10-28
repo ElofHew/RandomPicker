@@ -56,6 +56,29 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xF26F;}"
+                                       Header="分组方式"
+                                       Description="{Binding GroupStyleSummary}">
+                <controls:SettingsExpander.Footer>
+                    <ComboBox MinWidth="120" ItemsSource="{Binding GroupStyleNames}"
+                              SelectedIndex="{Binding GroupStyleIndex, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE92F;}"
+                                       Header="小组总数"
+                                       Description="{Binding GroupSummary}">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="160" Minimum="1" Maximum="26" TickFrequency="1"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding GroupCount, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding GroupCountText}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
             <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE0B5;}"
                                        Header="重置本轮"
                                        Description="{Binding RoundSummary}">

@@ -202,6 +202,16 @@ public class PickerWindow : Window
             return;
         }
 
+        if (_settings.Mode == PickMode.Group)
+        {
+            // 抽组跟名单也无关，显示的是「还剩几组 / 共几组」。
+            var groups = GroupPicker.Labels(_settings).Count;
+            _counter.Text = _settings.IsNoRepeat
+                ? $"{GroupPicker.RemainingInRound(_settings)}/{groups}"
+                : groups.ToString();
+            return;
+        }
+
         var total = _roster.Names.Count;
         if (total == 0)
         {
@@ -210,7 +220,7 @@ public class PickerWindow : Window
         }
 
         // 不重复模式显示「本轮还剩几个」，纯随机模式没有轮次概念，显示总人数。
-        _counter.Text = _settings.Mode == PickMode.NoRepeat
+        _counter.Text = _settings.IsNoRepeat
             ? $"{_roster.RemainingInRound(_settings)}/{total}"
             : total.ToString();
     }
@@ -479,6 +489,7 @@ public class PickerWindow : Window
 
     private const string CountGroup = "picker.count";
     private const string ReplaceGroup = "picker.replace";
+    private const string GroupStyleGroup = "picker.groupstyle";
     private const string SizeGroup = "picker.size";
     private const string HoldGroup = "picker.hold";
 
@@ -496,14 +507,16 @@ public class PickerWindow : Window
             new Separator(),
 
             Choice("拍照抽人", SourceGroup, _settings.Mode == PickMode.Photo,
-                () => SetSource(photo: true)),
-            Choice("随机抽人", SourceGroup, _settings.Mode != PickMode.Photo,
-                () => SetSource(photo: false)),
+                () => SetSource(PickMode.Photo)),
+            Choice("随机抽人", SourceGroup, _settings.Mode is PickMode.Random or PickMode.NoRepeat,
+                () => SetSource(_settings.TextMode)),
+            Choice("随机抽组", SourceGroup, _settings.Mode == PickMode.Group,
+                () => SetSource(PickMode.Group)),
             Submenu("抽取数量",
             [
-                Choice("1 人", CountGroup, _settings.PickCount <= 1, () => SetCount(1)),
-                Choice("2 人", CountGroup, _settings.PickCount == 2, () => SetCount(2)),
-                Choice("3 人", CountGroup, _settings.PickCount >= 3, () => SetCount(3))
+                Choice("1 个", CountGroup, _settings.PickCount <= 1, () => SetCount(1)),
+                Choice("2 个", CountGroup, _settings.PickCount == 2, () => SetCount(2)),
+                Choice("3 个", CountGroup, _settings.PickCount >= 3, () => SetCount(3))
             ]),
             Submenu("抽取模式",
             [
@@ -512,9 +525,17 @@ public class PickerWindow : Window
                 Choice("放回", ReplaceGroup, _settings.TextMode == PickMode.Random,
                     () => SetReplace(PickMode.Random))
             ]),
+            Submenu("分组方式",
+            [
+                Choice("字母", GroupStyleGroup, _settings.GroupStyle == GroupStyle.Letter,
+                    () => SetGroupStyle(GroupStyle.Letter)),
+                Choice("数字", GroupStyleGroup, _settings.GroupStyle == GroupStyle.Number,
+                    () => SetGroupStyle(GroupStyle.Number))
+            ]),
             Item("重置本轮", () =>
             {
                 RosterService.ResetRound(_settings);
+                GroupPicker.ResetRound(_settings);
                 RefreshCounter();
                 SettingsChanged?.Invoke(this, EventArgs.Empty);
             }),
@@ -623,14 +644,29 @@ public class PickerWindow : Window
     private static MenuItem Header(string text) => new() { Header = text, IsEnabled = false };
 
     /// <summary>
-    /// 切换抽人的来源：拍照（从合影里挑人脸）还是随机抽人（从名单里抽）。
+    /// 切换抽人来源：拍照、随机抽人、随机抽组。
     /// </summary>
     /// <remarks>
     /// 状态怎么迁走见 <see cref="PickerSettings.SetSource"/>——设置页调的是同一份逻辑。
     /// </remarks>
-    private void SetSource(bool photo)
+    private void SetSource(PickMode source)
     {
-        _settings.SetSource(photo);
+        _settings.SetSource(source);
+        RefreshCounter();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// 组名用字母还是数字。
+    /// </summary>
+    /// <remarks>
+    /// 换写法等于换了一批标签（「1 组」和「A 组」不是同一个组），
+    /// 所以顺手把本轮的抽组记录作废，免得剩下的组数算得莫名其妙。
+    /// </remarks>
+    private void SetGroupStyle(GroupStyle style)
+    {
+        _settings.GroupStyle = style;
+        GroupPicker.ResetRound(_settings);
         RefreshCounter();
         SettingsChanged?.Invoke(this, EventArgs.Empty);
     }

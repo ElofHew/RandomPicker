@@ -155,7 +155,7 @@ public class RosterService
         // 一次抽不了比名单还多的人。
         count = Math.Min(count, _names.Count);
 
-        var noRepeat = settings.Mode == PickMode.NoRepeat;
+        var noRepeat = settings.IsNoRepeat;
 
         // 这一批里已经拿过的人。初始还要带上之前的状态：
         // 不重复模式下是本轮已抽的，另外两种模式都回避「和上一个人重样」。
@@ -214,7 +214,7 @@ public class RosterService
     /// <summary>本轮还剩多少人没抽到。</summary>
     public int RemainingInRound(PickerSettings settings)
     {
-        if (settings.Mode != PickMode.NoRepeat)
+        if (!settings.IsNoRepeat)
         {
             return _names.Count;
         }

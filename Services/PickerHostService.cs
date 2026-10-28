@@ -260,6 +260,43 @@ public class PickerHostService : IHostedService
 
     #endregion
 
+    #region 设置页
+
+    /// <summary>名单里有多少人。</summary>
+    public int RosterCount => _roster?.Names.Count ?? 0;
+
+    /// <summary>本轮还剩多少人没抽到。放回模式下没有轮次概念，等于总人数。</summary>
+    public int RemainingInRound => _roster?.RemainingInRound(_settings) ?? 0;
+
+    /// <summary>重新读一遍名单文件。</summary>
+    public void ReloadRoster()
+    {
+        _roster?.Reload();
+        _window?.RefreshCounter();
+    }
+
+    /// <summary>清空本轮记录，提前开始新一轮。</summary>
+    public void ResetRound()
+    {
+        RosterService.ResetRound(_settings);
+        _window?.RefreshCounter();
+        SaveSettingsInternal();
+    }
+
+    /// <summary>
+    /// 把尺寸、人数这些跟悬浮球显示有关的改动刷到球上。
+    /// </summary>
+    /// <remarks>
+    /// 设置页改了档位或抽取模式之后调一下，不然球要等到下次重开才变样子。
+    /// </remarks>
+    public void RefreshPickerWindow()
+    {
+        _window?.ApplySize();
+        _window?.RefreshCounter();
+    }
+
+    #endregion
+
     private void SaveSettingsInternal()
     {
         _window?.CapturePosition();

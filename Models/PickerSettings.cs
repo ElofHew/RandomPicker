@@ -185,6 +185,49 @@ public class PickerSettings
 
     #endregion
 
+    #region 模式切换
+
+    /// <summary>
+    /// 切换抽人来源：拍照（从合影里挑人脸）还是随机抽人（从名单里抽）。
+    /// </summary>
+    /// <remarks>
+    /// 切回「随机抽人」时用 <see cref="TextMode"/> 恢复，不然用户当初选的「不放回」会被忘掉。
+    /// 悬浮球右键菜单和设置页都调这里，免得两边各写一套、慢慢走样。
+    /// </remarks>
+    public void SetSource(bool photo)
+    {
+        if (photo)
+        {
+            Mode = PickMode.Photo;
+            return;
+        }
+
+        Mode = TextMode == PickMode.Photo ? PickMode.NoRepeat : TextMode;
+    }
+
+    /// <summary>
+    /// 设置「随机抽人」的放回 / 不放回。
+    /// </summary>
+    /// <remarks>
+    /// 当前就在随机抽人时立刻生效；在拍照模式下只是先记下来
+    /// （拍照没有放回可言），切回随机抽人时自动按它恢复。
+    /// </remarks>
+    public void SetReplace(PickMode mode)
+    {
+        if (mode == PickMode.Photo)
+        {
+            return;
+        }
+
+        TextMode = mode;
+        if (Mode != PickMode.Photo)
+        {
+            Mode = mode;
+        }
+    }
+
+    #endregion
+
     #region 读写
 
     private static readonly JsonSerializerOptions JsonOptions = new()

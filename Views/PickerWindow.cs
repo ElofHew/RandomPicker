@@ -626,22 +626,11 @@ public class PickerWindow : Window
     /// 切换抽人的来源：拍照（从合影里挑人脸）还是随机抽人（从名单里抽）。
     /// </summary>
     /// <remarks>
-    /// 切回「随机抽人」时用 <see cref="PickerSettings.TextMode"/> 恢复，
-    /// 不然用户当初选的「不放回」会被忘掉。
+    /// 状态怎么迁走见 <see cref="PickerSettings.SetSource"/>——设置页调的是同一份逻辑。
     /// </remarks>
     private void SetSource(bool photo)
     {
-        if (photo)
-        {
-            _settings.Mode = PickMode.Photo;
-        }
-        else
-        {
-            _settings.Mode = _settings.TextMode == PickMode.Photo
-                ? PickMode.NoRepeat
-                : _settings.TextMode;
-        }
-
+        _settings.SetSource(photo);
         RefreshCounter();
         SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -650,17 +639,11 @@ public class PickerWindow : Window
     /// 设置「随机抽人」的放回 / 不放回。
     /// </summary>
     /// <remarks>
-    /// 当前就在随机抽人时<b>立刻生效</b>；在拍照模式下只是先记下来
-    /// （拍照没有放回可言），切回随机抽人时自动按它恢复。
+    /// 状态怎么迁走见 <see cref="PickerSettings.SetReplace"/>。
     /// </remarks>
     private void SetReplace(PickMode mode)
     {
-        _settings.TextMode = mode;
-        if (_settings.Mode != PickMode.Photo)
-        {
-            _settings.Mode = mode;
-        }
-
+        _settings.SetReplace(mode);
         RefreshCounter();
         SettingsChanged?.Invoke(this, EventArgs.Empty);
     }

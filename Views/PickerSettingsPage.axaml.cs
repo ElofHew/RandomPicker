@@ -22,9 +22,12 @@ namespace ClassIsland.RandomPicker.Views;
 /// 随机抽选的设置页。
 /// </summary>
 /// <remarks>
-/// 日常那些开关都在悬浮窗的右键菜单里，这一页主要承载「拍照抽人」——
-/// 尤其是<b>「试拍一次」的实测数字</b>：一张几十人的合影到底能检出多少、各步各花多少毫秒，
-/// 只能量，不能猜。
+/// 和悬浮球右键菜单是<b>同一批设置</b>，改哪边都一样——菜单适合上课时随手点，
+/// 这一页适合一次配好。所以来源、抽取数量、放回/不放回、大小、结果显示这些都在这里复刻了一份，
+/// 排在「拍照抽人」前面。
+/// <para/>
+/// 背面还承载了拍照抽人的详细参数，尤其是<b>「试拍一次」的实测数字</b>：
+/// 一张几十人的合影到底能检出多少、各步各花多少毫秒，只能量，不能猜。
 /// <para/>
 /// <b>数值类设置一律走本页的包装属性，不直接绑到 <see cref="PickerSettings"/> 上。</b>
 /// 那个类是普通 POCO，不发变更通知；直接绑的话拖完滑块旁边的数字不会跟着变。
@@ -83,13 +86,166 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
         ? "已隐藏。可在托盘菜单「更多选项 → 显示抽选悬浮球」叫回来。"
         : "正在显示。隐藏后不会自己冒出来，重启也保持隐藏。";
 
+    public List<string> SizeNames { get; } = ["小", "中", "大"];
+
+    /// <summary>悬浮球大小。0 / 1 / 2 对应小 / 中 / 大。</summary>
+    public int BallSizeIndex
+    {
+        get => (int)Settings.Size;
+        set
+        {
+            if (value is < 0 or > 2)
+            {
+                return;
+            }
+
+            Settings.Size = (PickerSize)value;
+            // 右键菜单改完是当场 ApplySize 的，设置页也得立刻刷，不然要等下次重开。
+            _service?.RefreshPickerWindow();
+            Save(nameof(BallSizeIndex));
+        }
+    }
+
+    #endregion
+
+    #region 抽人
+
+    public List<string> SourceNames { get; } = ["随机抽人", "拍照抽人"];
+
+    public List<string> CountNames { get; } = ["1 人", "2 人", "3 人"];
+
+    public List<string> ReplaceNames { get; } = ["不放回", "放回"];
+
+    /// <summary>抽人来源。0 = 随机抽人，1 = 拍照抽人。</summary>
+    public int SourceIndex
+    {
+        get => Settings.Mode == PickMode.Photo ? 1 : 0;
+        set
+        {
+            Settings.SetSource(value == 1);
+            _service?.RefreshPickerWindow();
+            // 只通知真正变了的：抽取模式的值不受来源影响，跟着一起通知会让下拉框来回写。
+            Save(nameof(SourceIndex), nameof(SourceSummary));
+        }
+    }
+
+    public string SourceSummary => Settings.Mode == PickMode.Photo
+        ? "从摄像头拍的合影里挑人脸，裁出人像。"
+        : "从名单里抽名字。";
+
+    /// <summary>一次抽几个人。</summary>
+    public int PickCountIndex
+    {
+        get => Math.Clamp(Settings.PickCount, 1, 3) - 1;
+        set
+        {
+            Settings.PickCount = Math.Clamp(value, 0, 2) + 1;
+            Save(nameof(PickCountIndex), nameof(CountSummary));
+        }
+    }
+
+    public string CountSummary => Settings.PickCount <= 1
+        ? "一次抽一个人。"
+        : $"一次抽 {Settings.PickCount} 个人，同一批内不会重复。";
+
+    /// <summary>放回 / 不放回。0 = 不放回，1 = 放回。</summary>
+    public int ReplaceIndex
+    {
+        get => Settings.TextMode == PickMode.NoRepeat ? 0 : 1;
+        set
+        {
+            Settings.SetReplace(value == 1 ? PickMode.Random : PickMode.NoRepeat);
+            _service?.RefreshPickerWindow();
+            Save(nameof(ReplaceIndex), nameof(ReplaceSummary), nameof(RoundSummary));
+        }
+    }
+
+    public string ReplaceSummary => Settings.TextMode == PickMode.NoRepeat
+        ? "抽到的人本轮不再出现，抽完一轮自动开始新一轮。"
+        : "每次都从全部名单里抽，只回避和上一次同一个人。";
+
+    public string RoundSummary
+    {
+        get
+        {
+            if (_service is null)
+            {
+                return "清空本轮记录。";
+            }
+
+            return Settings.TextMode == PickMode.NoRepeat
+                ? $"共 {_service.RosterCount} 人，本轮还剩 {_service.RemainingInRound} 人。"
+                : $"共 {_service.RosterCount} 人。放回模式下没有轮次概念。";
+        }
+    }
+
+    #endregion
+
+    #region 结果显示
+
+    public List<string> HoldNames { get; } = ["1.5 秒", "2.5 秒", "4 秒"];
+
+    /// <summary>菜单里给的三档停留时长。改这里要连 <see cref="HoldNames"/> 一起改。</summary>
+    private static readonly double[] HoldSeconds = [1.5, 2.5, 4.0];
+
+    public bool ShowCenterReveal
+    {
+        get => Settings.ShowCenterReveal;
+        set
+        {
+            Settings.ShowCenterReveal = value;
+            Save(nameof(ShowCenterReveal));
+        }
+    }
+
+    public bool ShowNotification
+    {
+        get => Settings.ShowNotification;
+        set
+        {
+            Settings.ShowNotification = value;
+            Save(nameof(ShowNotification));
+        }
+    }
+
+    /// <summary>中央大字停留时长。老配置里可能是别的值，按最接近的一档显示。</summary>
+    public int HoldIndex
+    {
+        get
+        {
+            var best = 0;
+            for (var i = 1; i < HoldSeconds.Length; i++)
+            {
+                if (Math.Abs(Settings.RevealSeconds - HoldSeconds[i]) <
+                    Math.Abs(Settings.RevealSeconds - HoldSeconds[best]))
+                {
+                    best = i;
+                }
+            }
+
+            return best;
+        }
+        set
+        {
+            if (value < 0 || value >= HoldSeconds.Length)
+            {
+                return;
+            }
+
+            Settings.RevealSeconds = HoldSeconds[value];
+            Save(nameof(HoldIndex), nameof(HoldSummary));
+        }
+    }
+
+    public string HoldSummary => $"抽中之后停留 {Settings.RevealSeconds:F1} 秒。";
+
     #endregion
 
     #region 名单
 
     public string RosterSummary => _service is null
         ? "插件未就绪。"
-        : $"{_service.RosterPath}\n一行一个名字，保存后立即生效。";
+        : $"{_service.RosterPath}\n共 {_service.RosterCount} 人，一行一个名字，保存后立即生效。";
 
     #endregion
 
@@ -306,6 +462,18 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
         {
             // 没有关联程序就算了，路径就写在上面。
         }
+    }
+
+    private void OnReloadRoster(object? sender, RoutedEventArgs e)
+    {
+        _service?.ReloadRoster();
+        Raise(nameof(RosterSummary), nameof(RoundSummary));
+    }
+
+    private void OnResetRound(object? sender, RoutedEventArgs e)
+    {
+        _service?.ResetRound();
+        Raise(nameof(RoundSummary));
     }
 
     private void OnCloseCamera(object? sender, RoutedEventArgs e) =>

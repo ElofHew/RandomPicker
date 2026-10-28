@@ -128,62 +128,81 @@ public class RosterService
     /// 随机数走 <see cref="RandomNumberGenerator"/>，每次取值都直接来自操作系统的熵源，
     /// 不存在「用时间戳当种子、同一毫秒内连抽拿到同一个结果」这类问题。
     /// </remarks>
-    public string? Pick(PickerSettings settings)
+    /// <summary>抽一个人。等价于 <see cref="PickMany"/> 抽 1 个。</summary>
+    public string? Pick(PickerSettings settings) => PickMany(settings, 1).FirstOrDefault();
+
+    /// <summary>
+    /// 一次抽 <paramref name="count"/> 个人，<b>这一批里互不重复</b>。
+    /// </summary>
+    /// <param name="settings">插件设置，抽选状态（本轮已抽、上次抽到谁）会就地更新。</param>
+    /// <param name="count">要抽几个。比名单还多时按名单长度截断。</param>
+    /// <returns>抽中的名字；名单为空时返回空表。</returns>
+    /// <remarks>
+    /// 随机数走 <see cref="RandomNumberGenerator"/>，每次取值都直接来自操作系统的熵源，
+    /// 不存在「用时间戳当种子、同一毫秒内连抽拿到同一个结果」这类问题。
+    /// <para/>
+    /// 不重复模式下，抽完一轮会自动清空重来——连续抽 3 个人时可能横跨轮次的边界，
+    /// 这时候同一批里<b>仍然不会重复</b>（已经抽到的人会一直被排除）。
+    /// </remarks>
+    public List<string> PickMany(PickerSettings settings, int count)
     {
-        if (_names.Count == 0)
+        var picked = new List<string>();
+        if (_names.Count == 0 || count <= 0)
         {
-            return null;
+            return picked;
         }
 
-        if (_names.Count == 1)
+        // 一次抽不了比名单还多的人。
+        count = Math.Min(count, _names.Count);
+
+        var noRepeat = settings.Mode == PickMode.NoRepeat;
+
+        // 这一批里已经拿过的人。初始还要带上之前的状态：
+        // 不重复模式下是本轮已抽的，另外两种模式都回避「和上一个人重样」。
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        if (noRepeat)
         {
-            settings.LastPicked = _names[0];
-            return _names[0];
+            used.UnionWith(settings.DrawnThisRound);
         }
 
-        var candidates = BuildCandidates(settings);
-        var picked = candidates[RandomNumberGenerator.GetInt32(candidates.Count)];
-
-        if (settings.Mode == PickMode.NoRepeat)
+        if (settings.LastPicked is { } last)
         {
-            settings.DrawnThisRound.Add(picked);
+            used.Add(last);
         }
 
-        settings.LastPicked = picked;
+        for (var i = 0; i < count; i++)
+        {
+            var pool = _names.Where(x => !used.Contains(x)).ToList();
+            if (pool.Count == 0)
+            {
+                // 一轮抽完了：清掉本轮记录，从全体里再来。这一批已经抽到的仍然排除在外。
+                settings.DrawnThisRound.Clear();
+                used.Clear();
+                foreach (var already in picked)
+                {
+                    used.Add(already);
+                }
+
+                pool = _names.Where(x => !used.Contains(x)).ToList();
+                if (pool.Count == 0)
+                {
+                    break;
+                }
+            }
+
+            var chosen = pool[RandomNumberGenerator.GetInt32(pool.Count)];
+            picked.Add(chosen);
+            used.Add(chosen);
+
+            if (noRepeat)
+            {
+                settings.DrawnThisRound.Add(chosen);
+            }
+
+            settings.LastPicked = chosen;
+        }
+
         return picked;
-    }
-
-    private List<string> BuildCandidates(PickerSettings settings)
-    {
-        if (settings.Mode == PickMode.NoRepeat)
-        {
-            // 本轮没抽过的人。抽完一轮就清空重来。
-            var remaining = _names.Where(x => !settings.DrawnThisRound.Contains(x, StringComparer.Ordinal)).ToList();
-            if (remaining.Count > 0)
-            {
-                return remaining;
-            }
-
-            settings.DrawnThisRound.Clear();
-            remaining = [.._names];
-
-            // 新一轮的第一抽回避上一轮最后一个人，免得看起来像「连着抽到同一个」。
-            if (remaining.Count > 1 && settings.LastPicked is { } last)
-            {
-                remaining.RemoveAll(x => string.Equals(x, last, StringComparison.Ordinal));
-            }
-
-            return remaining;
-        }
-
-        // 纯随机模式：只回避和上一次同一个人。
-        var pool = _names.ToList();
-        if (settings.LastPicked is { } previous)
-        {
-            pool.RemoveAll(x => string.Equals(x, previous, StringComparison.Ordinal));
-        }
-
-        return pool.Count > 0 ? pool : [.._names];
     }
 
     /// <summary>「不重复」模式下手动开始新一轮。</summary>

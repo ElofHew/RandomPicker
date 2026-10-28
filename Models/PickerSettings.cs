@@ -43,6 +43,27 @@ public class PickerSettings
 {
     public PickMode Mode { get; set; } = PickMode.NoRepeat;
 
+    /// <summary>
+    /// 「随机抽人」用的抽取模式：<see cref="PickMode.NoRepeat"/> = 不放回，
+    /// <see cref="PickMode.Random"/> = 放回。
+    /// </summary>
+    /// <remarks>
+    /// 拍照（<see cref="PickMode.Photo"/>）抽的是照片里的人脸，没有「放回 / 不放回」可言；
+    /// 但这个值<b>照样记着</b>，切回「随机抽人」时按它恢复，不用重新选一遍。
+    /// <para/>
+    /// 约定：只要 <see cref="Mode"/> 不是拍照，两者就相等（<see cref="Load"/> 里会兜一下）。
+    /// </remarks>
+    public PickMode TextMode { get; set; } = PickMode.NoRepeat;
+
+    /// <summary>
+    /// 一次抽几个人。菜单里给的是 1 / 2 / 3。
+    /// </summary>
+    /// <remarks>
+    /// 名单模式下一次抽 N 个<b>互不重复</b>的人；拍照模式下从同一张合影里挑 N 张不同的人脸。
+    /// 实际能抽到的人数会被名单长度 / 检出的人脸数卡住，抽不出那么多就少给几个。
+    /// </remarks>
+    public int PickCount { get; set; } = 1;
+
     public PickerSize Size { get; set; } = PickerSize.Medium;
 
     /// <summary>
@@ -178,8 +199,8 @@ public class PickerSettings
         {
             if (File.Exists(path))
             {
-                return JsonSerializer.Deserialize<PickerSettings>(File.ReadAllText(path), JsonOptions)
-                       ?? new PickerSettings();
+                return Normalize(JsonSerializer.Deserialize<PickerSettings>(
+                    File.ReadAllText(path), JsonOptions) ?? new PickerSettings());
             }
         }
         catch (Exception)
@@ -188,6 +209,24 @@ public class PickerSettings
         }
 
         return new PickerSettings();
+    }
+
+    /// <summary>
+    /// 把读进来的设置收拾干净。
+    /// </summary>
+    /// <remarks>
+    /// 老配置里没有 <see cref="TextMode"/> 和 <see cref="PickCount"/>，反序列化出来是默认值，
+    /// 会和 <see cref="Mode"/> 对不上——这里按约定补回去，老用户升级后不用重新选一遍模式。
+    /// </remarks>
+    private static PickerSettings Normalize(PickerSettings s)
+    {
+        if (s.TextMode == PickMode.Photo || (s.Mode != PickMode.Photo && s.TextMode != s.Mode))
+        {
+            s.TextMode = s.Mode == PickMode.Photo ? PickMode.NoRepeat : s.Mode;
+        }
+
+        s.PickCount = Math.Clamp(s.PickCount, 1, 3);
+        return s;
     }
 
     public void Save(string path)

@@ -10,9 +10,12 @@ using Avalonia.Animation;
 using Avalonia.Media;
 using Avalonia.Media.Transformation;
 using Avalonia.Threading;
+using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.RandomPicker.Interop;
 using ClassIsland.RandomPicker.Models;
 using ClassIsland.RandomPicker.Services;
+using ClassIsland.Shared;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ClassIsland.RandomPicker.Views;
 
@@ -145,9 +148,6 @@ public class PickerWindow : Window
 
     /// <summary>设置被菜单改动，需要持久化。</summary>
     public event EventHandler? SettingsChanged;
-
-    /// <summary>用户要求隐藏悬浮窗。</summary>
-    public event EventHandler? HideRequested;
 
     #region 外观
 
@@ -469,39 +469,50 @@ public class PickerWindow : Window
         _menu.ShowAt(_knob, showAtPointer: true);
     }
 
-    /// <summary>单选组的组名。三组必须各不相同，否则会被归成一组互相抢。</summary>
-    private const string ModeGroup = "picker.mode";
+    /// <summary>
+    /// 单选组的组名，每组必须各不相同，否则会被归成一组互相抢。
+    /// </summary>
+    /// <remarks>
+    /// 见 <see cref="Choice"/> 里关于 Radio 和 GroupName 的说明。
+    /// </remarks>
+    private const string SourceGroup = "picker.source";
 
+    private const string CountGroup = "picker.count";
+    private const string ReplaceGroup = "picker.replace";
     private const string SizeGroup = "picker.size";
     private const string HoldGroup = "picker.hold";
 
     /// <summary>
-    /// 菜单内容。每次打开都重新构建，勾选状态和剩余人数才是当前的。
+    /// 菜单内容。每次打开都重新构建，勾选状态和人数才是当前的。
     /// </summary>
     private object[] BuildMenuItems()
     {
         var total = _roster.Names.Count;
-        var remaining = _roster.RemainingInRound(_settings);
 
         return
         [
-            Header(_settings.Mode == PickMode.Photo
-                ? "拍照抽人"
-                : total == 0
-                    ? "名单是空的"
-                    : _settings.Mode == PickMode.NoRepeat
-                        ? $"本轮还剩 {remaining} / {total} 人"
-                        : $"共 {total} 人"),
+            Header($"共 {total} 人"),
             Item("抽一个", () => PickRequested?.Invoke(this, EventArgs.Empty)),
             new Separator(),
 
-            Choice("随机抽选", ModeGroup, _settings.Mode == PickMode.Random,
-                () => SetMode(PickMode.Random)),
-            Choice("本轮内不重复", ModeGroup, _settings.Mode == PickMode.NoRepeat,
-                () => SetMode(PickMode.NoRepeat)),
-            Choice("拍照抽人", ModeGroup, _settings.Mode == PickMode.Photo,
-                () => SetMode(PickMode.Photo)),
-            Item("开始新一轮", () =>
+            Choice("拍照抽人", SourceGroup, _settings.Mode == PickMode.Photo,
+                () => SetSource(photo: true)),
+            Choice("随机抽人", SourceGroup, _settings.Mode != PickMode.Photo,
+                () => SetSource(photo: false)),
+            Submenu("抽取数量",
+            [
+                Choice("1 人", CountGroup, _settings.PickCount <= 1, () => SetCount(1)),
+                Choice("2 人", CountGroup, _settings.PickCount == 2, () => SetCount(2)),
+                Choice("3 人", CountGroup, _settings.PickCount >= 3, () => SetCount(3))
+            ]),
+            Submenu("抽取模式",
+            [
+                Choice("不放回", ReplaceGroup, _settings.TextMode == PickMode.NoRepeat,
+                    () => SetReplace(PickMode.NoRepeat)),
+                Choice("放回", ReplaceGroup, _settings.TextMode == PickMode.Random,
+                    () => SetReplace(PickMode.Random))
+            ]),
+            Item("重置本轮", () =>
             {
                 RosterService.ResetRound(_settings);
                 RefreshCounter();
@@ -509,54 +520,46 @@ public class PickerWindow : Window
             }),
             new Separator(),
 
-            Item("打开名单文件", OpenRosterFile),
-            Item("重新载入名单", () =>
+            Submenu("悬浮球大小",
+            [
+                Choice("小", SizeGroup, _settings.Size == PickerSize.Small,
+                    () => SetSize(PickerSize.Small)),
+                Choice("中", SizeGroup, _settings.Size == PickerSize.Medium,
+                    () => SetSize(PickerSize.Medium)),
+                Choice("大", SizeGroup, _settings.Size == PickerSize.Large,
+                    () => SetSize(PickerSize.Large))
+            ]),
+            Submenu("结果显示方式",
+            [
+                Toggle("屏幕中央弹出", _settings.ShowCenterReveal, value =>
+                {
+                    _settings.ShowCenterReveal = value;
+                    SettingsChanged?.Invoke(this, EventArgs.Empty);
+                }),
+                Toggle("ClassIsland 提醒", _settings.ShowNotification, value =>
+                {
+                    _settings.ShowNotification = value;
+                    SettingsChanged?.Invoke(this, EventArgs.Empty);
+                }),
+                Submenu("停留时长",
+                [
+                    Choice("1.5 秒", HoldGroup, Math.Abs(_settings.RevealSeconds - 1.5) < 0.01,
+                        () => SetHold(1.5)),
+                    Choice("2.5 秒", HoldGroup, Math.Abs(_settings.RevealSeconds - 2.5) < 0.01,
+                        () => SetHold(2.5)),
+                    Choice("4 秒", HoldGroup, Math.Abs(_settings.RevealSeconds - 4.0) < 0.01,
+                        () => SetHold(4.0))
+                ])
+            ]),
+            new Separator(),
+
+            Item("重新加载名单", () =>
             {
                 _roster.Reload();
                 RefreshCounter();
             }),
-            new Separator(),
-
-            new MenuItem
-            {
-                Header = "悬浮窗大小",
-                ItemsSource = new object[]
-                {
-                    Choice("小", SizeGroup, _settings.Size == PickerSize.Small,
-                        () => SetSize(PickerSize.Small)),
-                    Choice("中", SizeGroup, _settings.Size == PickerSize.Medium,
-                        () => SetSize(PickerSize.Medium)),
-                    Choice("大", SizeGroup, _settings.Size == PickerSize.Large,
-                        () => SetSize(PickerSize.Large))
-                }
-            },
-            new MenuItem
-            {
-                Header = "抽中之后",
-                ItemsSource = new object[]
-                {
-                    Toggle("屏幕中央弹出", _settings.ShowCenterReveal, value =>
-                    {
-                        _settings.ShowCenterReveal = value;
-                        SettingsChanged?.Invoke(this, EventArgs.Empty);
-                    }),
-                    Toggle("发送 ClassIsland 提醒", _settings.ShowNotification, value =>
-                    {
-                        _settings.ShowNotification = value;
-                        SettingsChanged?.Invoke(this, EventArgs.Empty);
-                    }),
-                    new Separator(),
-                    Choice("停留 1.5 秒", HoldGroup, Math.Abs(_settings.RevealSeconds - 1.5) < 0.01,
-                        () => SetHold(1.5)),
-                    Choice("停留 2.5 秒", HoldGroup, Math.Abs(_settings.RevealSeconds - 2.5) < 0.01,
-                        () => SetHold(2.5)),
-                    Choice("停留 4 秒", HoldGroup, Math.Abs(_settings.RevealSeconds - 4.0) < 0.01,
-                        () => SetHold(4.0))
-                }
-            },
-            new Separator(),
-
-            Item("隐藏悬浮窗", () => HideRequested?.Invoke(this, EventArgs.Empty))
+            Item("打开名单文件", OpenRosterFile),
+            Item("打开插件设置", OpenPluginSettings)
         ];
     }
 
@@ -566,6 +569,10 @@ public class PickerWindow : Window
         item.Click += (_, _) => action();
         return item;
     }
+
+    /// <summary>带子菜单的一项。子项每次开菜单时重建，勾状态才是当前的。</summary>
+    private static MenuItem Submenu(string header, object[] items) =>
+        new() { Header = header, ItemsSource = items };
 
     /// <summary>
     /// 真·布尔开关。
@@ -615,10 +622,53 @@ public class PickerWindow : Window
 
     private static MenuItem Header(string text) => new() { Header = text, IsEnabled = false };
 
-    private void SetMode(PickMode mode)
+    /// <summary>
+    /// 切换抽人的来源：拍照（从合影里挑人脸）还是随机抽人（从名单里抽）。
+    /// </summary>
+    /// <remarks>
+    /// 切回「随机抽人」时用 <see cref="PickerSettings.TextMode"/> 恢复，
+    /// 不然用户当初选的「不放回」会被忘掉。
+    /// </remarks>
+    private void SetSource(bool photo)
     {
-        _settings.Mode = mode;
+        if (photo)
+        {
+            _settings.Mode = PickMode.Photo;
+        }
+        else
+        {
+            _settings.Mode = _settings.TextMode == PickMode.Photo
+                ? PickMode.NoRepeat
+                : _settings.TextMode;
+        }
+
         RefreshCounter();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// 设置「随机抽人」的放回 / 不放回。
+    /// </summary>
+    /// <remarks>
+    /// 当前就在随机抽人时<b>立刻生效</b>；在拍照模式下只是先记下来
+    /// （拍照没有放回可言），切回随机抽人时自动按它恢复。
+    /// </remarks>
+    private void SetReplace(PickMode mode)
+    {
+        _settings.TextMode = mode;
+        if (_settings.Mode != PickMode.Photo)
+        {
+            _settings.Mode = mode;
+        }
+
+        RefreshCounter();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>一次抽几个。</summary>
+    private void SetCount(int count)
+    {
+        _settings.PickCount = count;
         SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -645,6 +695,27 @@ public class PickerWindow : Window
         catch (Exception)
         {
             // 没有关联程序就算了。
+        }
+    }
+
+    /// <summary>
+    /// 打开 ClassIsland 的应用设置，并直接停在本插件那一页。
+    /// </summary>
+    /// <remarks>
+    /// 拍照抽人那些参数（摄像头、人脸阈值、分块……）都在设置页里，
+    /// 悬浮窗菜单塞不下，给个入口跳过去就行。
+    /// </remarks>
+    private void OpenPluginSettings()
+    {
+        try
+        {
+            IAppHost.Host?.Services.GetService<IUriNavigationService>()
+                ?.NavigateWrapped(new Uri(
+                    $"classisland://app/settings/{PickerSettingsPage.SettingsPageId}"));
+        }
+        catch (Exception)
+        {
+            // 宿主还没起来、或者这个版本的 uri 换了，就算了。
         }
     }
 

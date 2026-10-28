@@ -30,9 +30,13 @@ namespace ClassIsland.RandomPicker.Views;
 /// 那个类是普通 POCO，不发变更通知；直接绑的话拖完滑块旁边的数字不会跟着变。
 /// 包装属性在写入之后顺手把关联的显示文字一起通知掉，还能立刻落盘。
 /// </remarks>
-[SettingsPageInfo("gordon.randompicker", "随机抽选", "", "")]
+[SettingsPageInfo(SettingsPageId, "随机抽选", "", "")]
 public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChanged
 {
+    /// <summary>
+    /// 设置页 id。悬浮窗菜单里的「打开插件设置」按它拼 uri，两边必须一致。
+    /// </summary>
+    public const string SettingsPageId = "gordon.randompicker";
     private readonly PickerHostService? _service;
 
     private List<CameraDevice> _cameras = [];

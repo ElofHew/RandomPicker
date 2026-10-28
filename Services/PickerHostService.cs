@@ -112,7 +112,6 @@ public class PickerHostService : IHostedService
         _window = new PickerWindow(_settings, _roster);
         _window.PickRequested += (_, _) => Pick();
         _window.SettingsChanged += (_, _) => SaveSettingsInternal();
-        _window.HideRequested += (_, _) => SetPickerWindowVisible(false);
         _window.Show();
     }
 
@@ -314,15 +313,16 @@ public class PickerHostService : IHostedService
 
         _ = Task.Run(async () =>
         {
-            var result = await CameraPicker.CaptureAndPickAsync(_settings, PluginDirectory, _configFolder);
+            var result = await CameraPicker.CaptureAndPickAsync(
+                _settings, PluginDirectory, _configFolder, count: PickCount);
             Dispatcher.UIThread.Post(() =>
             {
                 _shooting = false;
                 _window?.SetBusy(false);
 
-                if (result is { Success: true, Portrait: not null })
+                if (result is { Success: true } && result.Portraits.Count > 0)
                 {
-                    RevealWindow.Show(result.Portrait, null,
+                    RevealWindow.Show(result.Portraits, null,
                         _settings.PortraitHeight,
                         TimeSpan.FromSeconds(Math.Clamp(_settings.RevealSeconds, 0.5, 30)),
                         _window?.Accent ?? DefaultAccent);
@@ -370,11 +370,11 @@ public class PickerHostService : IHostedService
             return;
         }
 
-        var name = TextRoster.Pick(_settings);
+        var names = TextRoster.PickMany(_settings, PickCount);
         SaveSettingsInternal();
         _window?.RefreshCounter();
 
-        if (name is null)
+        if (names.Count == 0)
         {
             // 名单是空的——与其静悄悄什么都不发生，不如直接把话说清楚。
             Reveal(note is null ? "名单是空的" : note, isHint: true);
@@ -383,14 +383,20 @@ public class PickerHostService : IHostedService
 
         if (_settings.ShowCenterReveal)
         {
-            Reveal(name, isHint: false, note);
+            // 多个人竖着排。横着连成一排的话，三个名字在大字号下会宽到出屏。
+            Reveal(string.Join('\n', names), isHint: false, note);
         }
 
         if (_settings.ShowNotification)
         {
-            SendNotification(name);
+            SendNotification(string.Join("、", names));
         }
     }
+
+    /// <summary>
+    /// 一次抽几个。菜单里给的是 1 / 2 / 3，这里再兜一次底，防止配置被人手改成别的值。
+    /// </summary>
+    private int PickCount => Math.Clamp(_settings.PickCount, 1, 3);
 
     private void Reveal(string text, bool isHint, string? note = null)
     {

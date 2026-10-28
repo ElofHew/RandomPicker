@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
@@ -31,8 +32,8 @@ public class RevealWindow : Window
 {
     private static RevealWindow? _instance;
 
+    private readonly StackPanel _portraits;
     private readonly TextBlock _nameText;
-    private readonly Image _portrait;
     private readonly TextBlock _caption;
     private readonly StackPanel _content;
     private readonly Border _card;
@@ -58,9 +59,18 @@ public class RevealWindow : Window
     /// <param name="portrait">裁好的人像。</param>
     /// <param name="caption">人像下面的一行小字，没有就传 null。</param>
     /// <param name="height">人像显示高度（逻辑像素）。</param>
-    public static void Show(Bitmap portrait, string? caption, double height, TimeSpan hold, Color accent)
+    public static void Show(Bitmap portrait, string? caption, double height, TimeSpan hold, Color accent) =>
+        Show([portrait], caption, height, hold, accent);
+
+    /// <summary>
+    /// 一次显示好几张人像。拍照模式一次抽多个人时走这条。
+    /// </summary>
+    /// <param name="portraits">裁好的人像，按抽到的顺序排。</param>
+    /// <param name="caption">人像下面的一行小字，没有就传 null。</param>
+    /// <param name="height">单张人像的显示高度（逻辑像素）。多张时会等比缩一点，免得排不下。</param>
+    public static void Show(IReadOnlyList<Bitmap> portraits, string? caption, double height, TimeSpan hold, Color accent)
     {
-        Ensure(hold, accent, height * 0.2).ShowPortrait(portrait, caption, height, hold, accent);
+        Ensure(hold, accent, height * 0.2).ShowPortraits(portraits, caption, height, hold, accent);
     }
 
     /// <summary>拿到可用的窗口实例：已经开着就复用，否则新建。</summary>
@@ -94,9 +104,11 @@ public class RevealWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         IsHitTestVisible = false;
 
-        _portrait = new Image
+        // 一次抽多个人时，人像横着排开。
+        _portraits = new StackPanel
         {
-            Stretch = Stretch.Uniform,
+            Orientation = Orientation.Horizontal,
+            Spacing = 16,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             IsVisible = false
@@ -129,7 +141,7 @@ public class RevealWindow : Window
         {
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { _portrait, _nameText, _caption }
+            Children = { _portraits, _nameText, _caption }
         };
 
         _card = new Border
@@ -175,8 +187,7 @@ public class RevealWindow : Window
     /// <summary>复用当前窗口显示一个名字。</summary>
     private void ShowText(string text, string? caption, double fontSize, TimeSpan hold, Color accent)
     {
-        _portrait.IsVisible = false;
-        _portrait.Source = null;
+        ClearPortraits();
         _caption.IsVisible = !string.IsNullOrEmpty(caption);
         _caption.Text = caption ?? string.Empty;
         _caption.MaxWidth = Math.Max(240, fontSize * 5);
@@ -189,13 +200,33 @@ public class RevealWindow : Window
         Bump(hold, accent);
     }
 
-    /// <summary>复用当前窗口显示一张人像。</summary>
-    private void ShowPortrait(Bitmap portrait, string? caption, double height, TimeSpan hold, Color accent)
+    /// <summary>复用当前窗口显示一到多张人像。</summary>
+    private void ShowPortraits(IReadOnlyList<Bitmap> portraits, string? caption, double height, TimeSpan hold, Color accent)
     {
+        ClearPortraits();
+
+        // 三张并排时按原高度会顶到屏幕边上，人多了就整体缩一点。
+        var each = portraits.Count switch
+        {
+            <= 1 => height,
+            2 => height * 0.82,
+            _ => height * 0.68
+        };
+
+        foreach (var portrait in portraits)
+        {
+            _portraits.Children.Add(new Image
+            {
+                Source = portrait,
+                Stretch = Stretch.Uniform,
+                Height = each,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+        }
+
+        _portraits.IsVisible = portraits.Count > 0;
         _nameText.IsVisible = false;
-        _portrait.IsVisible = true;
-        _portrait.Source = portrait;
-        _portrait.Height = height;
 
         _caption.IsVisible = !string.IsNullOrEmpty(caption);
         _caption.Text = caption ?? string.Empty;
@@ -203,6 +234,21 @@ public class RevealWindow : Window
         _card.CornerRadius = new CornerRadius(18);
         _card.Padding = new Thickness(18);
         Bump(hold, accent);
+    }
+
+    /// <summary>把人像区清空并释放 Bitmap，不然连着抽会一直攒着图不放。</summary>
+    private void ClearPortraits()
+    {
+        foreach (var child in _portraits.Children)
+        {
+            if (child is Image { Source: IDisposable bitmap })
+            {
+                bitmap.Dispose();
+            }
+        }
+
+        _portraits.Children.Clear();
+        _portraits.IsVisible = false;
     }
 
     /// <summary>缩一下再弹回来，给出「换了一个」的反馈，比原地换内容更容易察觉。</summary>

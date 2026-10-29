@@ -134,15 +134,19 @@ public class RosterService
     /// <summary>
     /// 一次抽 <paramref name="count"/> 个人，<b>这一批里互不重复</b>。
     /// </summary>
-    /// <param name="settings">插件设置，抽选状态（本轮已抽、上次抽到谁）会就地更新。</param>
+    /// <param name="settings">插件设置，抽选状态（本轮已抽、最近抽过谁）会就地更新。</param>
     /// <param name="count">要抽几个。比名单还多时按名单长度截断。</param>
     /// <returns>抽中的名字；名单为空时返回空表。</returns>
     /// <remarks>
     /// 随机数走 <see cref="RandomNumberGenerator"/>，每次取值都直接来自操作系统的熵源，
     /// 不存在「用时间戳当种子、同一毫秒内连抽拿到同一个结果」这类问题。
     /// <para/>
-    /// 不重复模式下，抽完一轮会自动清空重来——连续抽 3 个人时可能横跨轮次的边界，
-    /// 这时候同一批里<b>仍然不会重复</b>（已经抽到的人会一直被排除）。
+    /// 两种模式口径不同：
+    /// <list type="bullet">
+    /// <item><b>不放回</b>：本轮没抽过的人里等概率挑，抽完一轮自动开新一轮；</item>
+    /// <item><b>放回</b>：每次都从全体里挑，但按「最近抽过」降权——见 <see cref="WeightedPicker"/>。</item>
+    /// </list>
+    /// 不管哪种模式，同一批里都不会重复。
     /// </remarks>
     public List<string> PickMany(PickerSettings settings, int count)
     {
@@ -155,54 +159,92 @@ public class RosterService
         // 一次抽不了比名单还多的人。
         count = Math.Min(count, _names.Count);
 
-        var noRepeat = settings.IsNoRepeat;
-
-        // 这一批里已经拿过的人。初始还要带上之前的状态：
-        // 不重复模式下是本轮已抽的，另外两种模式都回避「和上一个人重样」。
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        if (noRepeat)
+        if (settings.IsNoRepeat)
         {
-            used.UnionWith(settings.DrawnThisRound);
+            PickWithoutReplacement(settings, count, picked);
+        }
+        else
+        {
+            PickWithReplacement(settings, count, picked);
         }
 
-        if (settings.LastPicked is { } last)
+        if (picked.Count > 0)
         {
-            used.Add(last);
+            // 最近抽过谁只记在抽完之后：一次抽三个，那三个都算「刚抽过」。
+            settings.LastPicked = picked[^1];
+            foreach (var name in picked)
+            {
+                WeightedPicker.Remember(settings.RecentPicks, name);
+            }
         }
+
+        return picked;
+    }
+
+    /// <summary>不放回：本轮没抽过的人里等概率挑。</summary>
+    private void PickWithoutReplacement(PickerSettings settings, int count, List<string> picked)
+    {
+        var remaining = Undrawn(settings);
 
         for (var i = 0; i < count; i++)
         {
-            var pool = _names.Where(x => !used.Contains(x)).ToList();
-            if (pool.Count == 0)
+            if (remaining.Count == 0)
             {
-                // 一轮抽完了：清掉本轮记录，从全体里再来。这一批已经抽到的仍然排除在外。
-                settings.DrawnThisRound.Clear();
-                used.Clear();
-                foreach (var already in picked)
-                {
-                    used.Add(already);
-                }
-
-                pool = _names.Where(x => !used.Contains(x)).ToList();
-                if (pool.Count == 0)
+                // 一轮抽完了：开新一轮。这一批已经抽到的仍然排除在外。
+                remaining = StartNewRound(settings, picked);
+                if (remaining.Count == 0)
                 {
                     break;
                 }
             }
 
-            var chosen = pool[RandomNumberGenerator.GetInt32(pool.Count)];
+            var chosen = remaining[RandomNumberGenerator.GetInt32(remaining.Count)];
             picked.Add(chosen);
-            used.Add(chosen);
+            remaining.Remove(chosen);
+            settings.DrawnThisRound.Add(chosen);
+        }
+    }
 
-            if (noRepeat)
+    /// <summary>放回：每次都从全体里挑，按「最近抽过」降权，同一批里不重复。</summary>
+    private void PickWithReplacement(PickerSettings settings, int count, List<string> picked)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var pool = _names.Where(x => !picked.Contains(x)).ToList();
+            if (pool.Count == 0)
             {
-                settings.DrawnThisRound.Add(chosen);
+                break;
             }
 
-            settings.LastPicked = chosen;
+            // 上一次抽到的人权重是 0，<see cref="WeightedPicker"/> 内部自然会避开他，
+            // 所以这里不需要再单独把他剔出去。
+            picked.Add(WeightedPicker.Pick(pool, settings.RecentPicks));
+        }
+    }
+
+    /// <summary>本轮还没抽到的人。</summary>
+    private List<string> Undrawn(PickerSettings settings) =>
+        _names.Where(x => !settings.DrawnThisRound.Contains(x, StringComparer.Ordinal)).ToList();
+
+    /// <summary>
+    /// 开新一轮：清空本轮记录，并把上一轮最后一个人挡在门外。
+    /// </summary>
+    /// <remarks>
+    /// 「挡一下」是为了观感：上一轮最后一抽和这一轮第一抽是紧挨着的，
+    /// 撞上就像抽重了。名单只剩一个人时挡不住，也没必要挡。
+    /// </remarks>
+    private List<string> StartNewRound(PickerSettings settings, List<string> picked)
+    {
+        settings.DrawnThisRound.Clear();
+
+        var remaining = _names.Where(x => !picked.Contains(x)).ToList();
+
+        if (remaining.Count > 1 && settings.LastPicked is { } last)
+        {
+            remaining.RemoveAll(x => string.Equals(x, last, StringComparison.Ordinal));
         }
 
-        return picked;
+        return remaining;
     }
 
     /// <summary>「不重复」模式下手动开始新一轮。</summary>

@@ -175,7 +175,7 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
 
     public string ReplaceSummary => Settings.TextMode == PickMode.NoRepeat
         ? "抽过的不再出现，抽完一轮自动开始新一轮。名单和小组共用这个设定。"
-        : "每次都从全部里抽，只回避和上一次相同。名单和小组共用这个设定。";
+        : "每次都从全体里抽，但最近抽过的会被降权（上一次直接排除）。名单和小组共用这个设定。";
 
     public string RoundSummary
     {

@@ -40,6 +40,7 @@ public static class GroupPicker
     /// 一次抽 <paramref name="count"/> 个组，<b>这一批里互不重复</b>。
     /// </summary>
     /// <remarks>
+    /// 口径跟抽人一样：不放回时本轮抽过的组不再出现，放回时按「最近抽过」降权。
     /// 随机数走 <see cref="RandomNumberGenerator"/>：每次取值都直接来自操作系统的熵源，
     /// 不存在「用时间戳当种子、同一毫秒内连抽拿到同一个结果」这类问题。
     /// </remarks>
@@ -55,52 +56,76 @@ public static class GroupPicker
         // 一次抽不了比组数还多的组。
         count = Math.Min(count, labels.Count);
 
-        var noRepeat = settings.IsNoRepeat;
-
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        if (noRepeat)
+        if (settings.IsNoRepeat)
         {
-            used.UnionWith(settings.DrawnGroupsThisRound);
+            PickWithoutReplacement(settings, count, labels, picked);
+        }
+        else
+        {
+            PickWithReplacement(settings, count, labels, picked);
         }
 
-        if (settings.LastGroupPicked is { } last)
+        if (picked.Count > 0)
         {
-            used.Add(last);
+            settings.LastGroupPicked = picked[^1];
+            foreach (var group in picked)
+            {
+                WeightedPicker.Remember(settings.RecentGroups, group);
+            }
         }
+
+        return picked;
+    }
+
+    /// <summary>不放回：本轮没抽过的组里等概率挑。</summary>
+    private static void PickWithoutReplacement(PickerSettings settings, int count,
+        List<string> labels, List<string> picked)
+    {
+        var remaining = labels
+            .Where(x => !settings.DrawnGroupsThisRound.Contains(x, StringComparer.Ordinal))
+            .ToList();
 
         for (var i = 0; i < count; i++)
         {
-            var pool = labels.Where(x => !used.Contains(x)).ToList();
-            if (pool.Count == 0)
+            if (remaining.Count == 0)
             {
-                // 一轮抽完了：清掉本轮记录，从全体里再来。这一批已经抽到的仍然排除在外。
+                // 一轮抽完了：开新一轮。这一批已经抽到的仍然排除在外。
                 settings.DrawnGroupsThisRound.Clear();
-                used.Clear();
-                foreach (var already in picked)
+                remaining = labels.Where(x => !picked.Contains(x)).ToList();
+
+                // 上一轮最后一组和这一轮第一组是挨着的，撞上就像抽重了。
+                if (remaining.Count > 1 && settings.LastGroupPicked is { } last)
                 {
-                    used.Add(already);
+                    remaining.RemoveAll(x => string.Equals(x, last, StringComparison.Ordinal));
                 }
 
-                pool = labels.Where(x => !used.Contains(x)).ToList();
-                if (pool.Count == 0)
+                if (remaining.Count == 0)
                 {
                     break;
                 }
             }
 
-            var chosen = pool[RandomNumberGenerator.GetInt32(pool.Count)];
+            var chosen = remaining[RandomNumberGenerator.GetInt32(remaining.Count)];
             picked.Add(chosen);
-            used.Add(chosen);
+            remaining.Remove(chosen);
+            settings.DrawnGroupsThisRound.Add(chosen);
+        }
+    }
 
-            if (noRepeat)
+    /// <summary>放回：每次都从全体里挑，按「最近抽过」降权，同一批里不重复。</summary>
+    private static void PickWithReplacement(PickerSettings settings, int count,
+        List<string> labels, List<string> picked)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var pool = labels.Where(x => !picked.Contains(x)).ToList();
+            if (pool.Count == 0)
             {
-                settings.DrawnGroupsThisRound.Add(chosen);
+                break;
             }
 
-            settings.LastGroupPicked = chosen;
+            picked.Add(WeightedPicker.Pick(pool, settings.RecentGroups));
         }
-
-        return picked;
     }
 
     /// <summary>本轮还剩几组没抽到。放回模式下没有轮次概念，等于总组数。</summary>
@@ -119,10 +144,12 @@ public static class GroupPicker
     /// <summary>手动开始新一轮。</summary>
     /// <remarks>
     /// 改了组数或组名写法之后也应该调一次——旧的「E 组」记录留着没有意义。
+    /// <para/>
+    /// 只清「本轮抽过哪些」，<b>不清「上一组是谁」</b>：新一轮的第一抽也要避开刚抽过的那一组，
+    /// 否则连着两次抽到同一组，看起来就像抽重了。跟名单那边的口径保持一致。
     /// </remarks>
     public static void ResetRound(PickerSettings settings)
     {
         settings.DrawnGroupsThisRound.Clear();
-        settings.LastGroupPicked = null;
     }
 }

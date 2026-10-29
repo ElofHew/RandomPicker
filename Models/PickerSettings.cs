@@ -112,8 +112,14 @@ public class PickerSettings
     /// <summary>「不放回」模式下本轮已经抽到过的组。</summary>
     public List<string> DrawnGroupsThisRound { get; set; } = new();
 
-    /// <summary>上一次抽到的组，用于放回模式回避连着抽到同一个。</summary>
+    /// <summary>上一次抽到的组。不放回模式开新一轮时用它避开「连着两次抽到同一组」。</summary>
     public string? LastGroupPicked { get; set; }
+
+    /// <summary>
+    /// 最近抽到的几个组，<b>最近的排最前</b>。放回模式下按它降权。
+    /// </summary>
+    /// <remarks>长度由 <c>WeightedPicker.Memory</c> 卡着，不用无限增长。</remarks>
+    public List<string> RecentGroups { get; set; } = new();
 
     #endregion
 
@@ -146,7 +152,15 @@ public class PickerSettings
     /// <summary>「不重复」模式下本轮已经抽到过的人。</summary>
     public List<string> DrawnThisRound { get; set; } = new();
 
-    /// <summary>上一次抽到的人，用于「随机抽选」模式回避连抽同一个。</summary>
+    /// <summary>
+    /// 最近抽到的几个人，<b>最近的排最前</b>。放回模式下按它降权。
+    /// </summary>
+    /// <remarks>长度由 <c>WeightedPicker.Memory</c> 卡着，不用无限增长。</remarks>
+    public List<string> RecentPicks { get; set; } = new();
+
+    /// <summary>
+    /// 上一次抽到的人。不放回模式开新一轮时用它避开「连着两次抽到同一个人」。
+    /// </summary>
     public string? LastPicked { get; set; }
 
     #region 拍照抽人
@@ -335,6 +349,19 @@ public class PickerSettings
 
         s.PickCount = Math.Clamp(s.PickCount, 1, 3);
         s.GroupCount = Math.Clamp(s.GroupCount, 1, MaxGroups);
+
+        // 老配置只有「上一次抽到谁」，没有最近几次的记录。补一条进去，
+        // 升级后的第一次抽仍然会避开刚抽过的那个。
+        if (s.RecentPicks.Count == 0 && !string.IsNullOrEmpty(s.LastPicked))
+        {
+            s.RecentPicks.Add(s.LastPicked);
+        }
+
+        if (s.RecentGroups.Count == 0 && !string.IsNullOrEmpty(s.LastGroupPicked))
+        {
+            s.RecentGroups.Add(s.LastGroupPicked);
+        }
+
         return s;
     }
 

@@ -26,6 +26,14 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xF2D5;}"
+                                       Header="悬浮球人数显示"
+                                       Description="{Binding PickerCountSummary}">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding ShowPickerCount, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
             <Separator Margin="0 12 0 4"/>
             <ci:IconText Glyph="&#xECAB;" Text="抽人" Margin="0 0 0 4"/>
 

@@ -126,6 +126,17 @@ public class PickerSettings
     public PickerSize Size { get; set; } = PickerSize.Medium;
 
     /// <summary>
+    /// 悬浮球上那一行小字是否显示人数。
+    /// </summary>
+    /// <remarks>
+    /// 关掉之后改成显示「放回 / 不放回」——有人觉得桌面上那个数字一直在变很碍眼，
+    /// 只想知道当前是哪种抽法。
+    /// <para/>
+    /// 拍照模式下那一行本来就写「拍照」，不受这个开关影响。
+    /// </remarks>
+    public bool ShowPickerCount { get; set; } = true;
+
+    /// <summary>
     /// 悬浮窗是否被用户藏起来了。
     /// </summary>
     /// <remarks>

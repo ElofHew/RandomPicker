@@ -185,7 +185,11 @@ public class PickerWindow : Window
         ClampToScreen();
     }
 
-    /// <summary>刷新圆钮上的剩余人数。</summary>
+    /// <summary>刷新圆钮上的那行小字。</summary>
+    /// <remarks>
+    /// 三种情况：拍照写「拍照」；关掉人数显示后写「放回 / 不放回」；
+    /// 其余按抽人 / 抽组分别给出「N 人」「a/b 人」「N 组」「a/b 组」。
+    /// </remarks>
     public void RefreshCounter()
     {
         if (_busy)
@@ -197,8 +201,14 @@ public class PickerWindow : Window
 
         if (_settings.Mode == PickMode.Photo)
         {
-            // 拍照模式和名单没关系，显示人数只会误导。
+            // 拍照模式和名单、小组都没关系，显示人数只会误导。
             _counter.Text = "拍照";
+            return;
+        }
+
+        if (!_settings.ShowPickerCount)
+        {
+            _counter.Text = _settings.IsNoRepeat ? "不放回" : "放回";
             return;
         }
 
@@ -207,8 +217,8 @@ public class PickerWindow : Window
             // 抽组跟名单也无关，显示的是「还剩几组 / 共几组」。
             var groups = GroupPicker.Labels(_settings).Count;
             _counter.Text = _settings.IsNoRepeat
-                ? $"{GroupPicker.RemainingInRound(_settings)}/{groups}"
-                : groups.ToString();
+                ? $"{GroupPicker.RemainingInRound(_settings)}/{groups} 组"
+                : $"{groups} 组";
             return;
         }
 
@@ -219,10 +229,10 @@ public class PickerWindow : Window
             return;
         }
 
-        // 不重复模式显示「本轮还剩几个」，纯随机模式没有轮次概念，显示总人数。
+        // 不放回显示「本轮还剩几个」，放回没有轮次概念，显示总人数。
         _counter.Text = _settings.IsNoRepeat
-            ? $"{_roster.RemainingInRound(_settings)}/{total}"
-            : total.ToString();
+            ? $"{_roster.RemainingInRound(_settings)}/{total} 人"
+            : $"{total} 人";
     }
 
     /// <summary>

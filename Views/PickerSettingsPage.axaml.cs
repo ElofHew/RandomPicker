@@ -106,6 +106,23 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
         }
     }
 
+    /// <summary>悬浮球上是否显示人数。</summary>
+    public bool ShowPickerCount
+    {
+        get => Settings.ShowPickerCount;
+        set
+        {
+            Settings.ShowPickerCount = value;
+            // 球上那行小字要立刻换掉，不然得等下次重开窗口。
+            _service?.RefreshPickerWindow();
+            Save(nameof(ShowPickerCount), nameof(PickerCountSummary));
+        }
+    }
+
+    public string PickerCountSummary => Settings.ShowPickerCount
+        ? "球上显示「还剩几个 / 共几个」，抽人和抽组会分别标人、组。"
+        : "球上改显示「放回 / 不放回」。拍照模式仍显示「拍照」。";
+
     #endregion
 
     #region 抽人

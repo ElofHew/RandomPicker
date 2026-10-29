@@ -33,7 +33,7 @@ public class RevealWindow : Window
     private static RevealWindow? _instance;
 
     private readonly StackPanel _portraits;
-    private readonly TextBlock _nameText;
+    private readonly StackPanel _nameLines;
     private readonly TextBlock _caption;
     private readonly StackPanel _content;
     private readonly Border _card;
@@ -81,7 +81,7 @@ public class RevealWindow : Window
             return existing;
         }
 
-        var window = new RevealWindow(string.Empty, fontSize, hold, accent);
+        var window = new RevealWindow(fontSize, hold, accent);
         _instance = window;
         window.Show();
         return window;
@@ -90,7 +90,7 @@ public class RevealWindow : Window
     /// <summary>把当前开着的弹窗立刻收掉（比如插件停止时）。</summary>
     public static void CloseCurrent() => _instance?.FadeOutAndClose();
 
-    private RevealWindow(string name, double fontSize, TimeSpan hold, Color accent)
+    private RevealWindow(double fontSize, TimeSpan hold, Color accent)
     {
         SystemDecorations = SystemDecorations.None;
         Background = null;
@@ -125,23 +125,20 @@ public class RevealWindow : Window
             IsVisible = false
         };
 
-        _nameText = new TextBlock
+        // 一行一个 TextBlock，竖着排。不用一个 TextBlock 塞 \n——见 ShowText 里的说明。
+        _nameLines = new StackPanel
         {
-            Text = name,
-            FontSize = fontSize,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = Brushes.White,
+            Orientation = Orientation.Vertical,
+            Spacing = 0,
             HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap
+            VerticalAlignment = VerticalAlignment.Center
         };
 
         _content = new StackPanel
         {
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { _portraits, _nameText, _caption }
+            Children = { _portraits, _nameLines, _caption }
         };
 
         _card = new Border
@@ -184,16 +181,41 @@ public class RevealWindow : Window
         _closeTimer.Tick += (_, _) => FadeOutAndClose();
     }
 
-    /// <summary>复用当前窗口显示一个名字。</summary>
+    /// <summary>
+    /// 复用当前窗口显示一到多行名字。
+    /// </summary>
+    /// <remarks>
+    /// <b>每行单独一个 TextBlock，不把它们用 <c>\n</c> 拼进同一个 TextBlock。</b>
+    /// 同一个 TextBlock 里靠 <c>TextAlignment.Center</c> 逐行居中是靠不住的：
+    /// 各行宽度不一样时（「A 组」和「C 组」里字母的步进宽度不同），
+    /// 上面那行会莫名其妙往右偏，行数越多偏得越厉害——看着就像左边距一段段变大。
+    /// 抽纯中文名字时各行等宽，所以看不出来；抽字母组就露馅了。
+    /// 拆成独立的 TextBlock 之后，每行各自居中，行宽差异不影响对齐。
+    /// </remarks>
     private void ShowText(string text, string? caption, double fontSize, TimeSpan hold, Color accent)
     {
         ClearPortraits();
+        ClearLines();
+
+        foreach (var line in text.Replace("\r\n", "\n").Split('\n'))
+        {
+            _nameLines.Children.Add(new TextBlock
+            {
+                Text = line,
+                FontSize = fontSize,
+                FontWeight = FontWeight.SemiBold,
+                Foreground = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap
+            });
+        }
+
+        _nameLines.IsVisible = true;
+
         _caption.IsVisible = !string.IsNullOrEmpty(caption);
         _caption.Text = caption ?? string.Empty;
         _caption.MaxWidth = Math.Max(240, fontSize * 5);
-        _nameText.IsVisible = true;
-        _nameText.Text = text;
-        _nameText.FontSize = fontSize;
 
         _card.CornerRadius = new CornerRadius(fontSize * 0.18);
         _card.Padding = new Thickness(fontSize * 0.62, fontSize * 0.34);
@@ -226,7 +248,7 @@ public class RevealWindow : Window
         }
 
         _portraits.IsVisible = portraits.Count > 0;
-        _nameText.IsVisible = false;
+        ClearLines();
 
         _caption.IsVisible = !string.IsNullOrEmpty(caption);
         _caption.Text = caption ?? string.Empty;
@@ -234,6 +256,13 @@ public class RevealWindow : Window
         _card.CornerRadius = new CornerRadius(18);
         _card.Padding = new Thickness(18);
         Bump(hold, accent);
+    }
+
+    /// <summary>把名字区清空。人像和文字是互斥的两套内容，换内容前得把另一套收掉。</summary>
+    private void ClearLines()
+    {
+        _nameLines.Children.Clear();
+        _nameLines.IsVisible = false;
     }
 
     /// <summary>把人像区清空并释放 Bitmap，不然连着抽会一直攒着图不放。</summary>

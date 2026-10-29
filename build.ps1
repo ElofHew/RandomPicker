@@ -1,26 +1,85 @@
-﻿# 一键构建 RandomPicker 插件，并打包成 ClassIsland 的 .cipx 插件包。
-# 本机 dotnet SDK 在自定义目录，且 C:\Program Files\dotnet 只有运行时没有 SDK，
-# 所以必须把 SDK 目录放到 PATH 最前面，否则 `dotnet` 会命中无 SDK 的那个宿主。
+﻿#Requires -Version 5.1
+<#
+.SYNOPSIS
+    编译 ClassIsland.RandomPicker 插件，并打包成 ClassIsland 的 .cipx 插件包。
+
+.DESCRIPTION
+    环境要求：
+      * .NET 8 SDK        https://dotnet.microsoft.com/download/dotnet/8.0
+      * Windows PowerShell 5.1 或 PowerShell 7+
+      * 本仓库位于 ClassIsland 源码树的 plugins/RandomPicker 下
+        （工程用 ProjectReference 引用 ClassIsland.Core，位置不对会编译失败）
+
+.PARAMETER Configuration
+    编译配置，默认 Release。
+
+.PARAMETER SkipBuild
+    跳过编译，直接用现有输出目录打包（改打包清单时用得上）。
+
+.EXAMPLE
+    ./build.ps1
+
+.EXAMPLE
+    ./build.ps1 -Configuration Debug
+
+.EXAMPLE
+    ./build.ps1 -SkipBuild
+#>
+[CmdletBinding()]
+param(
+    [ValidateSet("Debug", "Release")]
+    [string] $Configuration = "Release",
+
+    [switch] $SkipBuild
+)
+
 $ErrorActionPreference = "Stop"
-
-$SdkDir = "D:\Environments\dotnet-sdk-8.0.426-win-x64"
-$GitDir = "C:\Program Files\Git\cmd"
-$env:Path = "$SdkDir;$GitDir;$env:Path"
-
 Set-Location $PSScriptRoot
 
-$Configuration = "Release"
-$Tfm          = "net8.0"
 $ProjectName  = "ClassIsland.RandomPicker"
 $AssemblyName = "$ProjectName.dll"
-# 代码都在 src/ 下，脚本留在仓库根目录。
+$Tfm          = "net8.0"
 $ProjectDir   = Join-Path $PSScriptRoot "src"
+$ProjectPath  = Join-Path $ProjectDir "$ProjectName.csproj"
+
+# ---------------------------------------------------------------- 0. 环境检查
+
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+    throw "找不到 dotnet 命令。请先安装 .NET 8 SDK：https://dotnet.microsoft.com/download/dotnet/8.0"
+}
+
+# 机器上可能只装了更高版本的 SDK：那样 global.json 会把它挡掉，编不过。
+$sdks = & dotnet --list-sdks 2>$null
+if ($LASTEXITCODE -ne 0 -or -not $sdks) {
+    throw "无法读取 SDK 列表（dotnet --list-sdks 失败）。请确认装的是 .NET SDK 而不是仅运行时。"
+}
+
+if (-not ($sdks | Where-Object { $_ -match '^8\.' })) {
+    throw ("需要 .NET 8 SDK，当前只找到：" + [Environment]::NewLine +
+           ($sdks -join [Environment]::NewLine) + [Environment]::NewLine +
+           "下载：https://dotnet.microsoft.com/download/dotnet/8.0")
+}
+
+if (-not (Test-Path $ProjectPath)) {
+    throw "找不到工程文件：$ProjectPath"
+}
+
+# 工程引用 ../.. 的 ClassIsland.Core，所以仓库必须放在宿主的 plugins 目录下。
+$CoreProject = Join-Path $PSScriptRoot "..\..\ClassIsland.Core\ClassIsland.Core.csproj"
+if (-not (Test-Path $CoreProject)) {
+    Write-Warning "没在 ../../ClassIsland.Core 找到宿主源码。构建大概率会失败——请把仓库放到 ClassIsland 源码树的 plugins/RandomPicker 下。"
+}
 
 # ---------------------------------------------------------------- 1. 编译
 
-Write-Host "==> 编译 $ProjectName ($Configuration)" -ForegroundColor Cyan
-dotnet build (Join-Path $ProjectDir "$ProjectName.csproj") -c $Configuration
-if ($LASTEXITCODE -ne 0) { throw "编译失败（exit $LASTEXITCODE），已中止打包。" }
+if ($SkipBuild) {
+    Write-Host "==> 跳过编译（-SkipBuild）" -ForegroundColor Cyan
+}
+else {
+    Write-Host "==> 编译 $ProjectName ($Configuration)" -ForegroundColor Cyan
+    & dotnet build $ProjectPath -c $Configuration
+    if ($LASTEXITCODE -ne 0) { throw "编译失败（exit $LASTEXITCODE），已中止打包。" }
+}
 
 $OutDir = Join-Path $ProjectDir "bin/$Configuration/$Tfm"
 if (-not (Test-Path $OutDir)) { throw "找不到输出目录：$OutDir" }

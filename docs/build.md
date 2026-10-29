@@ -2,7 +2,7 @@
 
 ## 环境
 
-- **.NET 8 SDK**（本仓库锁 `8.0.426`，见 `global.json`）
+- **.NET 8 SDK**（任何 8.0.x 都行，`global.json` 里锁的是 `8.0.100` + `latestFeature`）
 - **Windows**：拍照抽人依赖 WinRT（`MediaCapture` / `FaceDetector` 那套），代码按 dll 路径引用
 - 需要 **ClassIsland 源码**：工程通过 `ProjectReference` 指向 `ClassIsland.Core`
 
@@ -35,8 +35,14 @@ dotnet build src/ClassIsland.RandomPicker.csproj -c Release
 用 Windows PowerShell 跑根目录的 `build.ps1`，一条命令走完**编译 → 打包 → 算 MD5**：
 
 ```powershell
-./build.ps1
+./build.ps1                        # Release
+./build.ps1 -Configuration Debug   # 换配置
+./build.ps1 -SkipBuild             # 跳过编译，直接用现有输出打包
 ```
+
+脚本自己会检查环境（`dotnet` 在不在、有没有 .NET 8 SDK、工程文件在不在、
+上级目录有没有 `ClassIsland.Core`），不满足就直接报清楚原因，不会闷头编译到一半才炸。
+脚本里没有任何写死的本机路径，装在哪儿都能跑。
 
 输出：
 
@@ -79,12 +85,13 @@ face_detection_yunet_2023mar.onnx
 
 ## 几个已知的坑
 
-**父目录的 `global.json` 可能锁了别的 SDK。** ClassIsland 源码树根目录的 `global.json`
-可能写的是更新的 SDK 版本，而本仓库根目录这一份锁 `8.0.426`。`dotnet` 从**当前目录**往上找，
-就近原则生效，所以在仓库里构建没问题；在父目录跑 `dotnet build` 会报找不到 SDK。
+**父目录的 `global.json` 可能锁了别的 SDK。** ClassIsland 源码树根目录也有一份 `global.json`，
+`dotnet` 从**当前目录**往上找、就近生效，所以在仓库里构建用的是本仓库这份
+（`8.0.100` + `rollForward: latestFeature`，任何 8.0.x SDK 都能用）。
+在父目录直接跑 `dotnet build` 会用到宿主那份，可能就找不到 SDK 了。
 
-**`C:\Program Files\dotnet\dotnet.exe` 可能只有运行时没有 SDK。**
-`build.ps1` 开头会把 SDK 目录 prepend 到 `PATH`。
+**`C:\Program Files\dotnet\dotnet.exe` 有可能只有运行时没有 SDK。** 这种情况
+`dotnet --list-sdks` 会返回空，`build.ps1` 会直接报「需要 .NET 8 SDK」而不是让编译莫名其妙地失败。
 
 **CA1416 警告是预期的。** 拍照抽人用 WinRT API，而 TFM 是 `net8.0`。改成
 `net8.0-windows10.0.19041.0` 会触发框架引用还原（离线环境走不通），所以按 dll 路径引用，

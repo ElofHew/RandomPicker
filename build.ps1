@@ -13,14 +13,16 @@ $Configuration = "Release"
 $Tfm          = "net8.0"
 $ProjectName  = "ClassIsland.RandomPicker"
 $AssemblyName = "$ProjectName.dll"
+# 代码都在 src/ 下，脚本留在仓库根目录。
+$ProjectDir   = Join-Path $PSScriptRoot "src"
 
 # ---------------------------------------------------------------- 1. 编译
 
 Write-Host "==> 编译 $ProjectName ($Configuration)" -ForegroundColor Cyan
-dotnet build "$ProjectName.csproj" -c $Configuration
+dotnet build (Join-Path $ProjectDir "$ProjectName.csproj") -c $Configuration
 if ($LASTEXITCODE -ne 0) { throw "编译失败（exit $LASTEXITCODE），已中止打包。" }
 
-$OutDir = Join-Path $PSScriptRoot "bin/$Configuration/$Tfm"
+$OutDir = Join-Path $ProjectDir "bin/$Configuration/$Tfm"
 if (-not (Test-Path $OutDir)) { throw "找不到输出目录：$OutDir" }
 
 # ---------------------------------------------------------------- 2. 收集打包内容

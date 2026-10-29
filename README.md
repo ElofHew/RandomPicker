@@ -171,8 +171,22 @@
 并由定时器反复调用 `SetWindowPos(HWND_TOPMOST)` 顶回去。
 全是文档化的公开 API，不改系统设置，也不碰别的进程。
 
+## 仓库结构
+
+```
+src/                 代码：插件工程 + 全部 C# / axaml
+  Native/            ONNX Runtime 原生库与 YuNet 模型（随插件打包）
+manifest.yml         插件清单
+icon.png             插件图标
+build.ps1            一键编译 + 打包 .cipx + 算 MD5
+pack-include.txt     除插件 dll 外还要打进包的文件清单
+global.json          锁定 .NET SDK 版本
+```
+
 ## 开源信息
 
 - 仓库：<https://github.com/Gordonynh/RandomPicker>　·　MIT 协议
 - 针对 ClassIsland 2.1（Avalonia）构建；随 release 提供打包好的 `.cipx`
-- 从源码编译：克隆到 ClassIsland 源码树的 `plugins/` 目录下，`dotnet build -c Release`
+- 从源码编译：把整个仓库放进 ClassIsland 源码树的 `plugins/RandomPicker` 下，
+  然后 `dotnet build src/ClassIsland.RandomPicker.csproj -c Release`。
+  要连 `.cipx` 插件包一起出，用 `build.ps1`（Windows PowerShell 跑）。

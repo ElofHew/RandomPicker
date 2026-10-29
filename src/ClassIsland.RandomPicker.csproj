@@ -58,14 +58,20 @@
 
 
     <ItemGroup>
-        <ProjectReference Include="..\..\ClassIsland.Core\ClassIsland.Core.csproj"
+        <!-- 宿主源码在仓库外面两级：本插件放在 ClassIsland/plugins/RandomPicker/src。
+             只引用 Core，其余的由它自己带；Private=false 表示不复制到输出（宿主已加载）。 -->
+        <ProjectReference Include="..\..\..\ClassIsland.Core\ClassIsland.Core.csproj"
                           Private="false" ExcludeAssets="runtime" />
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="manifest.yml" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="README.md" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="icon.png" CopyToOutputDirectory="PreserveNewest" Condition="Exists('icon.png')" />
+        <!-- 清单 / 图标 / 说明留在仓库根目录：README 在 GitHub 上要能直接看到，
+             清单和图标是插件包的元数据，不属于代码。这里用 Link 让它们照常复制到输出目录，
+             打包脚本从输出目录取，路径才不用改。 -->
+        <None Include="..\manifest.yml" Link="manifest.yml" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="..\README.md" Link="README.md" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="..\icon.png" Link="icon.png" CopyToOutputDirectory="PreserveNewest"
+              Condition="Exists('..\icon.png')" />
     </ItemGroup>
 
 </Project>

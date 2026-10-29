@@ -500,7 +500,7 @@ public class PickerWindow : Window
     {
         var total = _roster.Names.Count;
 
-        return
+        object[] items =
         [
             Header($"共 {total} 人"),
             Item("抽一个", () => PickRequested?.Invoke(this, EventArgs.Empty)),
@@ -582,6 +582,9 @@ public class PickerWindow : Window
             Item("打开名单文件", OpenRosterFile),
             Item("打开插件设置", OpenPluginSettings)
         ];
+
+        WireRadioGroups(items);
+        return items;
     }
 
     private static MenuItem Item(string header, Action action)
@@ -594,6 +597,79 @@ public class PickerWindow : Window
     /// <summary>带子菜单的一项。子项每次开菜单时重建，勾状态才是当前的。</summary>
     private static MenuItem Submenu(string header, object[] items) =>
         new() { Header = header, ItemsSource = items };
+
+    /// <summary>
+    /// 让同组的单选菜单项真正互斥——点一个，同组其它的勾自动去掉。
+    /// </summary>
+    /// <remarks>
+    /// <b>Avalonia 自己那份互斥在这里是靠不住的，得自己补。</b>
+    /// 它的做法是：菜单项 <c>IsChecked</c> 变成 true 时通知
+    /// <c>DefaultMenuInteractionHandler</c>，由里面那个 <c>RadioButtonGroupManager</c>
+    /// 去取消同组的其它项。可那个分组表<b>只在菜单挂到可视树上的那一刻</b>扫一遍现有子项建立
+    /// （<c>AttachCore</c> 里的 <c>AddMenuItemToRadioGroup</c>）。
+    /// 我们的菜单项是每次打开时新建的、<c>GroupName</c> 在对象初始化器里就设好了，
+    /// 等 presenter 建立分组表时子项往往还没生成——表是空的，于是点第二项时没人去取消第一项，
+    /// 两个圆点就同时亮着（「随机抽人 + 拍照抽人」「分组方式里的字母 + 数字」都是这个原因）。
+    /// <para/>
+    /// 与其跟它的时序赌，不如在构建完菜单后自己扫一遍：谁被点，就把同组其它项的 <c>IsChecked</c> 清掉。
+    /// 注意 <c>DefaultMenuInteractionHandler.Click()</c> 是<b>先</b>把被点项置为 true <b>再</b>抛 Click，
+    /// 所以这里接管时读数已经是新的了。
+    /// </remarks>
+    private static void WireRadioGroups(IEnumerable<object> items)
+    {
+        var groups = new Dictionary<string, List<MenuItem>>(StringComparer.Ordinal);
+
+        void Collect(IEnumerable<object> source)
+        {
+            foreach (var entry in source)
+            {
+                if (entry is not MenuItem item)
+                {
+                    continue;
+                }
+
+                var groupName = item.GroupName;
+                if (item.ToggleType == MenuItemToggleType.Radio && !string.IsNullOrEmpty(groupName))
+                {
+                    if (!groups.TryGetValue(groupName, out var group))
+                    {
+                        groups[groupName] = group = [];
+                    }
+
+                    group.Add(item);
+                }
+
+                // 子菜单里的选项也要管：悬浮球大小、结果显示方式、分组方式都在子菜单里。
+                if (item.ItemsSource is IEnumerable<object> children)
+                {
+                    Collect(children);
+                }
+            }
+        }
+
+        Collect(items);
+
+        foreach (var group in groups.Values)
+        {
+            foreach (var item in group)
+            {
+                var siblings = group;
+                item.Click += (_, _) =>
+                {
+                    foreach (var sibling in siblings)
+                    {
+                        if (!ReferenceEquals(sibling, item))
+                        {
+                            sibling.IsChecked = false;
+                        }
+                    }
+
+                    // 被点的那一项可能本来就是选中的（Avalonia 不会再置 true），这里补一下。
+                    item.IsChecked = true;
+                };
+            }
+        }
+    }
 
     /// <summary>
     /// 真·布尔开关。
@@ -619,14 +695,15 @@ public class PickerWindow : Window
     /// </summary>
     /// <remarks>
     /// <b>互斥项必须用 Radio 并且给 GroupName，不能用 CheckBox。</b>
-    /// 用 CheckBox 时 Avalonia 只会机械地翻转被点的那一项：
-    /// 点已选中的项会把它取消掉（整组一个勾都没有），点另一项则两个都带勾——
-    /// 「菜单勾选有问题」就是这么来的。换成 Radio 之后，
-    /// Avalonia 的 RadioButtonGroupManager 会自动取消同组的其它项，
-    /// 点已选中的项也会保持选中。
+    /// 用 CheckBox 时点击只是机械地翻转被点的那一项：
+    /// 点已选中的项会把它取消掉（整组一个勾都没有），点另一项则两个都带勾。
     /// <para/>
-    /// GroupName <b>必须每组不同</b>：它是分组的唯一依据，不给名字的话
-    /// 三组九项会被归进同一组，互相抢。
+    /// 但 Radio 只负责<b>外观</b>：真正把同组其它项的勾去掉的是
+    /// <see cref="WireRadioGroups"/>——Avalonia 内建的那套分组在这里不生效，
+    /// 原因写在那边的注释里。所以<b>新加一组单选时不用额外做什么</b>，
+    /// 只要 GroupName 给对，构建完菜单会自动接上。
+    /// <para/>
+    /// GroupName <b>必须每组不同</b>：它是分组的唯一依据，两组给了同一个名字会被归成一组互相抢。
     /// </remarks>
     private static MenuItem Choice(string header, string groupName, bool isChecked, Action action)
     {

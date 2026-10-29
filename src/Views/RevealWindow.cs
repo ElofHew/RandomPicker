@@ -14,17 +14,18 @@ using ClassIsland.RandomPicker.Interop;
 namespace ClassIsland.RandomPicker.Views;
 
 /// <summary>
-/// 屏幕中央的大字弹窗。抽到谁就把名字亮在屏幕中间，停留几秒后自己淡出。
+/// 屏幕中央的结果弹窗。抽中谁（或者哪一组）就把结果亮在中间，停留几秒后自己淡出。
 /// </summary>
 /// <remarks>
+/// 两种内容共用一个窗口：文字（名字、组名，可多行）和拍照裁出来的人像。
 /// 两个关键设计：
 /// <list type="bullet">
-/// <item><b>窗口只有卡片那么大</b>，不铺满屏幕。早先版本是整屏窗口，结果它把悬浮钮盖住了，
-///       连着抽人时第二下点的是它而不是钮，表现就是「点不动」。
+/// <item><b>窗口只有卡片那么大</b>，不铺满屏幕。早先版本是整屏窗口，结果它把悬浮球盖住了，
+///       连着抽人时第二下点的是它而不是球，表现就是「点不动」。
 ///       试过用 <c>WS_EX_TRANSPARENT</c> 让它穿透，但那个样式只在窗口同时是 LAYERED 时才对命中测试生效，
 ///       而给 Avalonia 的透明窗口补 <c>WS_EX_LAYERED</c> 会打乱它自己的合成，窗口直接不显示。
 ///       两条路都堵死，索性从根上解决：窗口不覆盖屏幕，就没有挡不挡的问题。</item>
-/// <item><b>单例复用</b>。再抽一次不新开窗口，直接换掉里面的名字并重置计时，
+/// <item><b>单例复用</b>。再抽一次不新开窗口，直接换掉里面的内容并重置计时，
 ///       避免连点时叠出一摞窗口。</item>
 /// </list>
 /// </remarks>
@@ -42,12 +43,12 @@ public class RevealWindow : Window
     private bool _closing;
 
     /// <summary>
-    /// 显示一个名字。已经有窗口开着就复用它，否则新建。
+    /// 显示文字。<c>\n</c> 分行。已经有窗口开着就复用它，否则新建。
     /// </summary>
     public static void Show(string text, double fontSize, TimeSpan hold, Color accent) =>
         Show(text, null, fontSize, hold, accent);
 
-    /// <summary>显示一个名字，下面可以再带一行小字说明。</summary>
+    /// <summary>显示文字，下面可以再带一行小字说明。</summary>
     public static void Show(string text, string? caption, double fontSize, TimeSpan hold, Color accent)
     {
         Ensure(hold, accent, fontSize).ShowText(text, caption, fontSize, hold, accent);
@@ -99,7 +100,7 @@ public class RevealWindow : Window
         Topmost = true;
         CanResize = false;
         ShowActivated = false;
-        // 窗口按卡片大小自适应，居中显示。不铺满屏幕，才不会挡住悬浮钮。
+        // 窗口按卡片大小自适应，居中显示。不铺满屏幕，才不会挡住悬浮球。
         SizeToContent = SizeToContent.WidthAndHeight;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         IsHitTestVisible = false;

@@ -20,12 +20,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ClassIsland.RandomPicker.Views;
 
 /// <summary>
-/// 抽人用的小悬浮窗：一个圆钮，按一下抽一个，右键（或触摸长按）出设置菜单。
+/// 抽选用的小悬浮窗：一个圆球，按一下抽一个（人或一组），右键（或触摸长按）出设置菜单。
 /// </summary>
 /// <remarks>
-/// 交互上要同时容纳三件事——点击抽人、拖动挪窝、唤出菜单：
+/// 交互上要同时容纳三件事——点击抽选、拖动挪窝、唤出菜单：
 /// <list type="bullet">
-/// <item>按下后没怎么动就松开 → 抽人</item>
+/// <item>按下后没怎么动就松开 → 抽选</item>
 /// <item>移动超过阈值 → 转成拖窗口，松手时不触发抽选</item>
 /// <item>右键，或者触摸按住不动超过 <see cref="HoldMilliseconds"/> → 菜单</item>
 /// </list>
@@ -143,7 +143,7 @@ public class PickerWindow : Window
         _roster.RosterChanged += (_, _) => Dispatcher.UIThread.Post(RefreshCounter);
     }
 
-    /// <summary>用户请求抽一个人。</summary>
+    /// <summary>用户请求抽一次（抽人或抽组）。</summary>
     public event EventHandler? PickRequested;
 
     /// <summary>设置被菜单改动，需要持久化。</summary>
@@ -331,7 +331,7 @@ public class PickerWindow : Window
     public void CapturePosition()
     {
         // 隐藏期间不要写。藏起来之后窗口位置有可能已经失效，
-        // 这时候存进去，下次显示回来悬浮钮就会跳到别的地方去。
+        // 这时候存进去，下次显示回来悬浮球就会跳到别的地方去。
         // 正确的位置在 Hide() 之前就已经存好了。
         if (!IsVisible)
         {
@@ -391,7 +391,7 @@ public class PickerWindow : Window
             return;
         }
 
-        // 长按成立：弹菜单，并且标记一下，免得松手时又抽一个人。
+        // 长按成立：弹菜单，并且标记一下，免得松手时又抽一次。
         _menuOpened = true;
         _knob.RenderTransform = TransformOperations.Parse("scale(1)");
         ShowMenu();
@@ -809,7 +809,7 @@ public class PickerWindow : Window
     /// </summary>
     /// <remarks>
     /// 拍照抽人那些参数（摄像头、人脸阈值、分块……）都在设置页里，
-    /// 悬浮窗菜单塞不下，给个入口跳过去就行。
+    /// 右键菜单塞不下，给个入口跳过去就行。
     /// </remarks>
     private void OpenPluginSettings()
     {

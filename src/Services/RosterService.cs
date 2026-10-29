@@ -107,7 +107,7 @@ public class RosterService
         }
         catch (Exception)
         {
-            // 监视不了就算了，右键菜单里还有「重新载入名单」。
+            // 监视不了就算了，右键菜单里还有「重新加载名单」。
         }
     }
 
@@ -118,18 +118,6 @@ public class RosterService
         Reload();
         RosterChanged?.Invoke(this, EventArgs.Empty);
     }
-
-    /// <summary>
-    /// 抽一个人。
-    /// </summary>
-    /// <param name="settings">插件设置，抽选状态（本轮已抽、上次抽到谁）会就地更新。</param>
-    /// <returns>抽中的名字；名单为空时返回 <c>null</c>。</returns>
-    /// <remarks>
-    /// 随机数走 <see cref="RandomNumberGenerator"/>，每次取值都直接来自操作系统的熵源，
-    /// 不存在「用时间戳当种子、同一毫秒内连抽拿到同一个结果」这类问题。
-    /// </remarks>
-    /// <summary>抽一个人。等价于 <see cref="PickMany"/> 抽 1 个。</summary>
-    public string? Pick(PickerSettings settings) => PickMany(settings, 1).FirstOrDefault();
 
     /// <summary>
     /// 一次抽 <paramref name="count"/> 个人，<b>这一批里互不重复</b>。

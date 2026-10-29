@@ -26,7 +26,7 @@ namespace ClassIsland.RandomPicker.Views;
 /// 这一页适合一次配好。所以来源、抽取数量、放回/不放回、大小、结果显示这些都在这里复刻了一份，
 /// 排在「拍照抽人」前面。
 /// <para/>
-/// 背面还承载了拍照抽人的详细参数，尤其是<b>「试拍一次」的实测数字</b>：
+/// 此外还承载拍照抽人的详细参数，尤其是<b>「试拍一次」的实测数字</b>：
 /// 一张几十人的合影到底能检出多少、各步各花多少毫秒，只能量，不能猜。
 /// <para/>
 /// <b>数值类设置一律走本页的包装属性，不直接绑到 <see cref="PickerSettings"/> 上。</b>
@@ -37,7 +37,7 @@ namespace ClassIsland.RandomPicker.Views;
 public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChanged
 {
     /// <summary>
-    /// 设置页 id。悬浮窗菜单里的「打开插件设置」按它拼 uri，两边必须一致。
+    /// 设置页 id。悬浮球右键菜单里的「打开插件设置」按它拼 uri，两边必须一致。
     /// </summary>
     public const string SettingsPageId = "gordon.randompicker";
     private readonly PickerHostService? _service;
@@ -307,7 +307,7 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
         }
     }
 
-    /// <summary>中央大字停留时长。老配置里可能是别的值，按最接近的一档显示。</summary>
+    /// <summary>中央弹窗停留时长。老配置里可能是别的值，按最接近的一档显示。</summary>
     public int HoldIndex
     {
         get

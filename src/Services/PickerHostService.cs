@@ -16,7 +16,7 @@ using Microsoft.Extensions.Hosting;
 namespace ClassIsland.RandomPicker.Services;
 
 /// <summary>
-/// 插件主体：管住悬浮窗、设置、名单，以及抽中之后往哪儿显示。
+/// 插件主体：管住悬浮球、设置、名单和小组，以及抽中之后往哪儿显示。
 /// </summary>
 public class PickerHostService : IHostedService
 {
@@ -31,7 +31,7 @@ public class PickerHostService : IHostedService
     private RosterService? _roster;
     private PickerWindow? _window;
 
-    /// <summary>上一条还在播的提醒。连着抽人时先把它取消掉，免得在主界面上排队堆积。</summary>
+    /// <summary>上一条还在播的提醒。连着抽的时候先把它取消掉，免得在主界面上排队堆积。</summary>
     private NotificationRequest? _lastRequest;
 
     /// <summary>托盘菜单里那条「显示 / 隐藏抽选悬浮球」。</summary>
@@ -145,7 +145,7 @@ public class PickerHostService : IHostedService
         }
         else
         {
-            // 中央大字那个窗口是独立实例，悬浮窗没了它也没道理继续占着屏幕。
+            // 中央弹窗是独立实例，悬浮球没了它也没道理继续占着屏幕。
             RevealWindow.CloseCurrent();
             // 先存位置再隐藏：藏起来之后窗口位置可能就取不到有效值了。
             _window?.CapturePosition();
@@ -311,7 +311,7 @@ public class PickerHostService : IHostedService
     }
 
     /// <summary>
-    /// 抽一个人，然后按设置决定往哪儿显示。
+    /// 抽一次（人或组），然后按设置决定往哪儿显示。
     /// </summary>
     private void Pick()
     {
@@ -375,7 +375,7 @@ public class PickerHostService : IHostedService
     }
 
     /// <summary>
-    /// 拍照抽人：开摄像头、拍一张、检测、随机挑一个裁出来。
+    /// 拍照抽人：开摄像头、拍一张、检测、挑出若干个人裁成人像。
     /// </summary>
     /// <remarks>
     /// 整个过程要一两秒，全程在后台线程上跑，UI 只负责显示忙碌态。
@@ -441,7 +441,7 @@ public class PickerHostService : IHostedService
 
     private RosterService? _textRoster;
 
-    /// <summary>按名单抽一个。</summary>
+    /// <summary>按名单抽 N 个。</summary>
     /// <param name="note">附带说明，比如从拍照模式退回来的原因。</param>
     private void PickFromRoster(string? note = null)
     {
@@ -474,7 +474,7 @@ public class PickerHostService : IHostedService
     }
 
     /// <summary>
-    /// 一次抽几个。菜单里给的是 1 / 2 / 3，这里再兜一次底，防止配置被人手改成别的值。
+    /// 一次抽几个。菜单和设置页给的是 1 / 2 / 3，这里再兜一次底，防止配置被人手改成别的值。
     /// </summary>
     private int PickCount => Math.Clamp(_settings.PickCount, 1, 3);
 

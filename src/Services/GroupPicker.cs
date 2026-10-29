@@ -7,7 +7,7 @@ using ClassIsland.RandomPicker.Models;
 namespace ClassIsland.RandomPicker.Services;
 
 /// <summary>
-/// 抽组：从「A 组 / B 组 / …」或者「1 组 / 2 组 / …」里随机挑一个。
+/// 抽组：从「A 组 / B 组 / …」或者「1 组 / 2 组 / …」里随机挑出若干个。
 /// </summary>
 /// <remarks>
 /// 组不是名单——它由 <see cref="PickerSettings.GroupCount"/> 和

@@ -48,7 +48,7 @@ public enum GroupStyle
 }
 
 /// <summary>
-/// 悬浮窗尺寸档位。
+/// 悬浮球尺寸档位。
 /// </summary>
 public enum PickerSize
 {
@@ -62,6 +62,10 @@ public enum PickerSize
 /// </summary>
 public class PickerSettings
 {
+    /// <summary>
+    /// 抽什么。等同于「抽取来源」：名单（<see cref="PickMode.Random"/> /
+    /// <see cref="PickMode.NoRepeat"/>）、抽组（<see cref="PickMode.Group"/>）、拍照（<see cref="PickMode.Photo"/>）。
+    /// </summary>
     public PickMode Mode { get; set; } = PickMode.NoRepeat;
 
     /// <summary>
@@ -88,11 +92,12 @@ public class PickerSettings
     };
 
     /// <summary>
-    /// 一次抽几个人。菜单里给的是 1 / 2 / 3。
+    /// 一次抽几个。菜单和设置页给的都是 1 / 2 / 3。
     /// </summary>
     /// <remarks>
-    /// 名单模式下一次抽 N 个<b>互不重复</b>的人；拍照模式下从同一张合影里挑 N 张不同的人脸。
-    /// 实际能抽到的人数会被名单长度 / 检出的人脸数卡住，抽不出那么多就少给几个。
+    /// 三种来源都吃它：名单抽 N 个<b>互不重复</b>的人，拍照从同一张合影里挑 N 张不同的人脸，
+    /// 抽组抽 N 个不同的组。实际能抽到多少会被名单长度 / 检出的人脸数 / 小组总数卡住，
+    /// 抽不出那么多就少给几个。
     /// </remarks>
     public int PickCount { get; set; } = 1;
 
@@ -123,6 +128,7 @@ public class PickerSettings
 
     #endregion
 
+    /// <summary>悬浮球大小档位。</summary>
     public PickerSize Size { get; set; } = PickerSize.Medium;
 
     /// <summary>
@@ -146,18 +152,19 @@ public class PickerSettings
     /// </remarks>
     public bool Hidden { get; set; }
 
-    /// <summary>是否在屏幕中央弹出大字。</summary>
+    /// <summary>是否在屏幕中央弹出结果（名字、组名或多张人像）。</summary>
     public bool ShowCenterReveal { get; set; } = true;
 
     /// <summary>是否同时调用 ClassIsland 的提醒弹窗。</summary>
     public bool ShowNotification { get; set; } = true;
 
-    /// <summary>中央大字停留秒数。</summary>
+    /// <summary>中央弹窗停留秒数。</summary>
     public double RevealSeconds { get; set; } = 2.5;
 
-    /// <summary>悬浮窗位置（物理像素）。NaN 表示还没摆过，用默认位置。</summary>
+    /// <summary>悬浮球位置（物理像素）。<c>int.MinValue</c> 表示还没摆过，用默认位置。</summary>
     public int WindowX { get; set; } = int.MinValue;
 
+    /// <summary>与 <see cref="WindowX"/> 成对。</summary>
     public int WindowY { get; set; } = int.MinValue;
 
     /// <summary>「不重复」模式下本轮已经抽到过的人。</summary>
@@ -396,7 +403,7 @@ public class PickerSettings
 
     #endregion
 
-    /// <summary>悬浮窗直径（逻辑像素）。由 <see cref="Size"/> 推导，不进配置文件。</summary>
+    /// <summary>悬浮球直径（逻辑像素）。由 <see cref="Size"/> 推导，不进配置文件。</summary>
     [JsonIgnore]
     public double Diameter => Size switch
     {

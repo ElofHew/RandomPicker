@@ -67,7 +67,7 @@ public sealed class ShotResult
 }
 
 /// <summary>
-/// 拍一张班级合影，检测里面的人，随机挑一个裁出人像。
+/// 拍一张班级合影，检测里面的人，随机挑出若干个裁成人像。
 /// </summary>
 /// <remarks>
 /// <b>取帧走 <see cref="MediaFrameReader"/>，不是 <c>CapturePhotoToStreamAsync</c>。</b>
@@ -116,12 +116,13 @@ internal static class CameraPicker
     }
 
     /// <summary>
-    /// 拍一张、检测、随机挑一个裁出来。
+    /// 拍一张、检测、随机挑出 N 个人并逐个裁出来。
     /// </summary>
     /// <param name="settings">插件设置。</param>
     /// <param name="pluginDirectory">插件目录，模型和 ONNX Runtime 都在这儿。</param>
     /// <param name="configFolder">要存原图时存到哪。</param>
     /// <param name="annotate">是否额外产出一张画了检测框的缩略图（设置页试拍时才要）。</param>
+    /// <param name="count">抽几个人。检出的人脸不够就少给几个。</param>
     public static async Task<ShotResult> CaptureAndPickAsync(PickerSettings settings,
         string pluginDirectory, string configFolder, bool annotate = false, int count = 1)
     {

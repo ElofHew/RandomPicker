@@ -33,7 +33,12 @@ namespace ClassIsland.RandomPicker.Views;
 /// 那个类是普通 POCO，不发变更通知；直接绑的话拖完滑块旁边的数字不会跟着变。
 /// 包装属性在写入之后顺手把关联的显示文字一起通知掉，还能立刻落盘。
 /// </remarks>
-[SettingsPageInfo(SettingsPageId, "随机抽选", "", "")]
+/// <remarks>
+/// 侧边栏图标是 Fluent 的 <c>arrow_shuffle</c>（交叉箭头）：一组图标里它最接近「随机」这个意思，
+/// 抽人、抽组、拍照三种来源都盖得住。未选中用 regular（<c>\ue13b</c>）、选中用 filled
+/// （<c>\ue13a</c>）——宿主自己那几十个设置页都是这个配对规则。
+/// </remarks>
+[SettingsPageInfo(SettingsPageId, "随机抽选", "\ue13b", "\ue13a")]
 public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChanged
 {
     /// <summary>

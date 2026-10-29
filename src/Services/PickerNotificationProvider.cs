@@ -12,7 +12,7 @@ namespace ClassIsland.RandomPicker.Services;
 /// 就能拿到公开的 <c>ShowNotification</c>，抽中之后把结果推到主界面那条上。
 /// 注册之后它也会出现在「设置 → 提醒」里，可以单独调音效、特效这些。
 /// </remarks>
-[NotificationProviderInfo("B7A3E1C4-92D6-4F58-8E2A-5D0C7F3B6A19", "随机抽选", "",
+[NotificationProviderInfo("B7A3E1C4-92D6-4F58-8E2A-5D0C7F3B6A19", "随机抽选", "\ue13b",
     "抽中之后在主界面上显示结果。")]
 public class PickerNotificationProvider : NotificationProviderBase
 {

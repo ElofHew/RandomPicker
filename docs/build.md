@@ -1,0 +1,105 @@
+# 构建与打包
+
+## 环境
+
+- **.NET 8 SDK**（本仓库锁 `8.0.426`，见 `global.json`）
+- **Windows**：拍照抽人依赖 WinRT（`MediaCapture` / `FaceDetector` 那套），代码按 dll 路径引用
+- 需要 **ClassIsland 源码**：工程通过 `ProjectReference` 指向 `ClassIsland.Core`
+
+## 目录要求
+
+整个仓库必须放在 ClassIsland 源码树的 `plugins/RandomPicker` 下：
+
+```
+ClassIsland/                  ← 宿主源码根目录
+├─ ClassIsland.Core/
+└─ plugins/
+   └─ RandomPicker/           ← 本仓库
+      └─ src/ClassIsland.RandomPicker.csproj
+```
+
+csproj 里的引用是 `..\..\..\ClassIsland.Core\ClassIsland.Core.csproj`（`src/` 里多了一级），
+搬到别处会直接找不到工程。
+
+## 编译
+
+```bash
+cd plugins/RandomPicker
+dotnet build src/ClassIsland.RandomPicker.csproj -c Release
+```
+
+产物在 `src/bin/Release/net8.0/`。
+
+## 打包 .cipx
+
+用 Windows PowerShell 跑根目录的 `build.ps1`，一条命令走完**编译 → 打包 → 算 MD5**：
+
+```powershell
+./build.ps1
+```
+
+输出：
+
+```
+cipx/ClassIsland.RandomPicker.cipx    插件包
+cipx/checksums.md                     MD5，格式同官方 PluginSdk 的 generate-md5.ps1
+```
+
+> 脚本必须存成 **UTF-8 带 BOM**。PowerShell 5.1 按 ANSI 读无 BOM 的 ps1，
+> 中文注释会让整个文件解析失败。
+
+## .cipx 的格式要求
+
+`.cipx` 就是普通 zip，宿主安装时**整个解压到 `Plugins/<id>/`**，
+并且用 `pkg.GetEntry("manifest.yml")` 取清单。所以：
+
+- **所有文件必须在 zip 根目录**，绝对不能套一层文件夹——装不上的绝大多数原因都是这个；
+- 必须有根目录的 `manifest.yml`。脚本打完会重新打开 zip 自检这一点。
+
+`Compress-Archive` 只接受 `.zip` 后缀，所以脚本先压成 zip 再改名。
+
+## 包里放什么
+
+**只放插件自己的东西。** 宿主已加载的程序集（`ClassIsland.Core` / `Shared` / `Shared.IPC` /
+`Platforms.Abstractions`）一律不带——再塞一份会重复初始化，这和 csproj 里 `Private=false`
+的用意一致。
+
+除插件 dll 之外的文件写在 `pack-include.txt` 里（UTF-8 无 BOM，支持 `#` 注释），
+目前是 ONNX Runtime 那四个：
+
+```
+Microsoft.ML.OnnxRuntime.dll
+onnxruntime.dll
+onnxruntime_providers_shared.dll
+face_detection_yunet_2023mar.onnx
+```
+
+它们从输出目录取。`manifest.yml` / `icon.png` / `README.md` 由 csproj 用 `..\xxx` + `Link`
+从仓库根目录复制进输出，所以脚本按文件名取就行。
+
+## 几个已知的坑
+
+**父目录的 `global.json` 可能锁了别的 SDK。** ClassIsland 源码树根目录的 `global.json`
+可能写的是更新的 SDK 版本，而本仓库根目录这一份锁 `8.0.426`。`dotnet` 从**当前目录**往上找，
+就近原则生效，所以在仓库里构建没问题；在父目录跑 `dotnet build` 会报找不到 SDK。
+
+**`C:\Program Files\dotnet\dotnet.exe` 可能只有运行时没有 SDK。**
+`build.ps1` 开头会把 SDK 目录 prepend 到 `PATH`。
+
+**CA1416 警告是预期的。** 拍照抽人用 WinRT API，而 TFM 是 `net8.0`。改成
+`net8.0-windows10.0.19041.0` 会触发框架引用还原（离线环境走不通），所以按 dll 路径引用，
+接受平台兼容性警告。
+
+## 仓库结构
+
+```
+src/                 代码：插件工程 + 全部 C# / axaml
+  Native/            ONNX Runtime 原生库与 YuNet 模型（随插件打包）
+docs/                技术文档
+manifest.yml         插件清单
+icon.png             插件图标
+README.md            用户文档（打包时也带进 .cipx）
+build.ps1            一键编译 + 打包 + 算 MD5
+pack-include.txt     除插件 dll 外还要打进包的文件清单
+global.json          锁定 .NET SDK 版本
+```

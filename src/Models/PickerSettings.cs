@@ -167,6 +167,15 @@ public class PickerSettings
     /// <summary>与 <see cref="WindowX"/> 成对。</summary>
     public int WindowY { get; set; } = int.MinValue;
 
+    /// <summary>
+    /// 当前用第几份名单。1 ~ 5，对应配置目录下 <c>namelib/list1.txt</c> ~ <c>list5.txt</c>。
+    /// </summary>
+    /// <remarks>
+    /// 只记序号，不记名字：名字写在名单文件里（<c>&amp;$高一5班$</c>），
+    /// 改名不该让「上次用的是哪份」错位。
+    /// </remarks>
+    public int SelectedList { get; set; } = 1;
+
     /// <summary>「不重复」模式下本轮已经抽到过的人。</summary>
     public List<string> DrawnThisRound { get; set; } = new();
 
@@ -367,6 +376,9 @@ public class PickerSettings
 
         s.PickCount = Math.Clamp(s.PickCount, 1, 3);
         s.GroupCount = Math.Clamp(s.GroupCount, 1, MaxGroups);
+
+        // 名单份数是 NameListLibrary.SlotCount，这里不引用它是为了不让模型层依赖服务层。
+        s.SelectedList = Math.Clamp(s.SelectedList, 1, 5);
 
         // 老配置只有「上一次抽到谁」，没有最近几次的记录。补一条进去，
         // 升级后的第一次抽仍然会避开刚抽过的那个。

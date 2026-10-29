@@ -41,6 +41,7 @@ public class PickerWindow : Window
 
     private readonly PickerSettings _settings;
     private readonly RosterService _roster;
+    private readonly NameListLibrary _library;
     private readonly Border _knob;
     private readonly TextBlock _label;
     private readonly TextBlock _counter;
@@ -59,10 +60,11 @@ public class PickerWindow : Window
     private Point _pressOrigin;
     private PixelPoint _grabOffset;
 
-    public PickerWindow(PickerSettings settings, RosterService roster)
+    public PickerWindow(PickerSettings settings, RosterService roster, NameListLibrary library)
     {
         _settings = settings;
         _roster = roster;
+        _library = library;
 
         SystemDecorations = SystemDecorations.None;
         Background = null;
@@ -148,6 +150,9 @@ public class PickerWindow : Window
 
     /// <summary>设置被菜单改动，需要持久化。</summary>
     public event EventHandler? SettingsChanged;
+
+    /// <summary>用户要求换一份名单。参数是序号（1 ~ 5）。</summary>
+    public event EventHandler<int>? ListChangeRequested;
 
     #region 外观
 
@@ -502,6 +507,7 @@ public class PickerWindow : Window
     private const string GroupStyleGroup = "picker.groupstyle";
     private const string SizeGroup = "picker.size";
     private const string HoldGroup = "picker.hold";
+    private const string ListGroup = "picker.list";
 
     /// <summary>
     /// 菜单内容。每次打开都重新构建，勾选状态和人数才是当前的。
@@ -589,6 +595,7 @@ public class PickerWindow : Window
                 _roster.Reload();
                 RefreshCounter();
             }),
+            Submenu("选择名单文件", BuildListItems()),
             Item("打开名单文件", OpenRosterFile),
             Item("打开插件设置", OpenPluginSettings)
         ];
@@ -596,6 +603,32 @@ public class PickerWindow : Window
         WireRadioGroups(items);
         return items;
     }
+
+    /// <summary>
+    /// 「选择名单文件」的子项：五份名单，有名字的写成「1 - 高一5班」。
+    /// </summary>
+    /// <remarks>
+    /// 名字最多显示 <see cref="MenuTitleChars"/> 个字——菜单宽度有限，长名字会把整条撑开，
+    /// 而且挤掉后面的项。完整名字在设置页里能看到。
+    /// </remarks>
+    private object[] BuildListItems()
+    {
+        var items = new object[NameListLibrary.SlotCount];
+
+        for (var slot = 1; slot <= NameListLibrary.SlotCount; slot++)
+        {
+            var target = slot;
+            var label = NameListLibrary.Label(slot, _library.PeekTitle(slot), MenuTitleChars);
+
+            items[slot - 1] = Choice(label, ListGroup, _settings.SelectedList == slot,
+                () => ListChangeRequested?.Invoke(this, target));
+        }
+
+        return items;
+    }
+
+    /// <summary>菜单里名单名最多显示几个字。</summary>
+    private const int MenuTitleChars = 5;
 
     private static MenuItem Item(string header, Action action)
     {

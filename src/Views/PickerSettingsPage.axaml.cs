@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
@@ -59,6 +60,10 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
             .GetServices<IHostedService>()
             .OfType<PickerHostService>()
             .FirstOrDefault();
+
+        // 先把下拉框的内容填好再挂 DataContext：反过来的话 ComboBox 会先拿到空集合，
+        // SelectedIndex 被夹成 -1 再写回设置。
+        RefreshListNames();
 
         DataContext = this;
         InitializeComponent();
@@ -347,9 +352,74 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
 
     #region 名单
 
+    /// <summary>
+    /// 五份名单在下拉框里怎么显示。
+    /// </summary>
+    /// <remarks>
+    /// 就地替换元素、不换集合实例：换实例会让 ComboBox 的 SelectedIndex 归零，
+    /// 而归零又会写回设置，等于把用户选的那份改掉。
+    /// </remarks>
+    public ObservableCollection<string> ListNames { get; } = [];
+
+    /// <summary>当前选的是第几份（0 起算，对应 list1 ~ list5）。</summary>
+    public int ListIndex
+    {
+        get => Settings.SelectedList - 1;
+        set
+        {
+            if (_service is null || value < 0 || value >= NameListLibrary.SlotCount)
+            {
+                return;
+            }
+
+            if (value + 1 == _service.SelectedList)
+            {
+                return;
+            }
+
+            _service.SwitchList(value + 1);
+            RaiseListState();
+        }
+    }
+
+    public string ListSummary
+    {
+        get
+        {
+            if (_service is null)
+            {
+                return "插件未就绪。";
+            }
+
+            var slot = _service.SelectedList;
+            var title = _service.Library.PeekTitle(slot);
+            var name = NameListLibrary.Label(slot, title, 0);
+
+            return $"当前第 {name}\n想给名单起名字，在文件里写一行 &$高一5班$ 就行。";
+        }
+    }
+
     public string RosterSummary => _service is null
         ? "插件未就绪。"
         : $"{_service.RosterPath}\n共 {_service.RosterCount} 人，一行一个名字，保存后立即生效。";
+
+    /// <summary>重读五份名单的名字，填进下拉框。</summary>
+    private void RefreshListNames()
+    {
+        while (ListNames.Count < NameListLibrary.SlotCount)
+        {
+            ListNames.Add((ListNames.Count + 1).ToString());
+        }
+
+        for (var slot = 1; slot <= NameListLibrary.SlotCount; slot++)
+        {
+            // 下拉框地方够，名字不截断。
+            ListNames[slot - 1] = NameListLibrary.Label(slot, _service?.Library.PeekTitle(slot), 0);
+        }
+    }
+
+    private void RaiseListState() =>
+        Raise(nameof(ListIndex), nameof(ListSummary), nameof(RosterSummary), nameof(RoundSummary));
 
     #endregion
 
@@ -571,7 +641,9 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
     private void OnReloadRoster(object? sender, RoutedEventArgs e)
     {
         _service?.ReloadRoster();
-        Raise(nameof(RosterSummary), nameof(RoundSummary));
+        // 名单名也可能刚被改过，一起重读。
+        RefreshListNames();
+        Raise(nameof(RosterSummary), nameof(RoundSummary), nameof(ListSummary));
     }
 
     private void OnResetRound(object? sender, RoutedEventArgs e)

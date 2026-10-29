@@ -21,8 +21,12 @@ namespace ClassIsland.RandomPicker.Services;
 public class PickerHostService : IHostedService
 {
     private readonly string _settingsPath;
-    private readonly string _rosterPath;
     private readonly string _configFolder;
+    private readonly NameListLibrary _library;
+
+    /// <summary>老版本平铺在配置目录里的两份名单，升级时搬进 namelib/。</summary>
+    private readonly string _legacyRosterPath;
+    private readonly string _legacyTextPath;
 
     /// <summary>拍照抽人正在跑。摄像头开一次要一两秒，这期间再点就直接忽略。</summary>
     private bool _shooting;
@@ -46,15 +50,24 @@ public class PickerHostService : IHostedService
     {
         _configFolder = pluginConfigFolder;
         _settingsPath = Path.Combine(pluginConfigFolder, "settings.json");
-        // 名单跟设置放一起。右键菜单里的「打开名单文件」直接把它交给记事本。
-        _rosterPath = Path.Combine(pluginConfigFolder, "名单.txt");
+        _library = new NameListLibrary(pluginConfigFolder);
+
+        // 老版本把名单平铺在配置目录里，升级时搬进 namelib/list1.txt。
+        _legacyRosterPath = Path.Combine(pluginConfigFolder, "名单.txt");
+        _legacyTextPath = Path.Combine(pluginConfigFolder, "名单-文字.txt");
     }
 
     /// <summary>当前设置。设置页直接绑这上面。</summary>
     public PickerSettings Settings => _settings;
 
-    /// <summary>名单文件路径。</summary>
-    public string RosterPath => _rosterPath;
+    /// <summary>当前名单的文件路径。</summary>
+    public string RosterPath => _roster?.RosterPath ?? _library.PathOf(_settings.SelectedList);
+
+    /// <summary>名单库（五份名单的路径与命名规则）。</summary>
+    public NameListLibrary Library => _library;
+
+    /// <summary>当前用的是第几份名单（1 ~ 5）。</summary>
+    public int SelectedList => _settings.SelectedList;
 
     /// <summary>插件配置目录。拍照要存原图时用。</summary>
     public string ConfigFolder => _configFolder;
@@ -66,10 +79,41 @@ public class PickerHostService : IHostedService
     /// <summary>把设置存盘。设置页改完调一下。</summary>
     public void SaveSettings() => SaveSettingsInternal();
 
+    /// <summary>
+    /// 换一份名单。
+    /// </summary>
+    /// <remarks>
+    /// 不重建 <see cref="RosterService"/>，只让它切换文件（见 <see cref="RosterService.SwitchTo"/>）——
+    /// 悬浮球和设置页都订阅着它的变更事件，换实例会把订阅弄丢。
+    /// <para/>
+    /// 「本轮已抽」是跟着名单走的旧数据，换名单时一并清掉：新名单里根本没有那些人。
+    /// </remarks>
+    public void SwitchList(int slot)
+    {
+        slot = NameListLibrary.Clamp(slot);
+        if (slot == _settings.SelectedList && _roster is not null)
+        {
+            return;
+        }
+
+        _settings.SelectedList = slot;
+        _settings.DrawnThisRound.Clear();
+
+        // 文字抽选那份是同一序号的兄弟文件，换名单就得丢掉重建。
+        _textRoster?.Dispose();
+        _textRoster = null;
+
+        _roster?.SwitchTo(_library.PathOf(slot));
+        _window?.RefreshCounter();
+        SaveSettingsInternal();
+    }
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _settings = PickerSettings.Load(_settingsPath);
-        _roster = new RosterService(_rosterPath);
+
+        _library.MigrateLegacy(_legacyRosterPath, _legacyTextPath);
+        _roster = new RosterService(_library.PathOf(_settings.SelectedList));
 
         // 宿主启动 IHostedService 的时候 Avalonia 主窗口不一定已经就绪，
         // 用 Background 优先级排队，等 UI 空下来再开窗口。
@@ -92,6 +136,7 @@ public class PickerHostService : IHostedService
             _window = null;
         });
         _roster?.Dispose();
+        _textRoster?.Dispose();
         // 摄像头可能还热着，一定要关掉，否则指示灯会一直亮。
         return CameraPicker.DisposeAllAsync();
     }
@@ -109,9 +154,10 @@ public class PickerHostService : IHostedService
             return;
         }
 
-        _window = new PickerWindow(_settings, _roster);
+        _window = new PickerWindow(_settings, _roster, _library);
         _window.PickRequested += (_, _) => Pick();
         _window.SettingsChanged += (_, _) => SaveSettingsInternal();
+        _window.ListChangeRequested += (_, slot) => SwitchList(slot);
         _window.Show();
     }
 
@@ -419,7 +465,9 @@ public class PickerHostService : IHostedService
     /// 文字抽选用的名单。
     /// </summary>
     /// <remarks>
-    /// 开了「文字抽选用单独名单」就读那一份，否则还是主名单。
+    /// 开了「文字抽选用单独名单」就读那一份，否则还是当前名单。
+    /// 那一份是同一序号的兄弟文件（<c>namelib/listN-文字.txt</c>），换名单时跟着换。
+    /// <para/>
     /// 两份各自有各自的「本轮已抽」状态吗？——没有，共用一套。
     /// 名单隔离是为了圈定范围，不是为了各记各的进度。
     /// </remarks>
@@ -432,8 +480,7 @@ public class PickerHostService : IHostedService
                 return _roster!;
             }
 
-            _textRoster ??= new RosterService(
-                Path.Combine(_configFolder, "名单-文字.txt"));
+            _textRoster ??= new RosterService(_library.TextPathOf(_settings.SelectedList));
 
             return _textRoster;
         }

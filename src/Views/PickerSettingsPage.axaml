@@ -129,6 +129,15 @@
             <ci:IconText Glyph="&#xE8A5;" Text="名单" Margin="0 0 0 4"/>
 
             <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8A5;}"
+                                       Header="选择名单"
+                                       Description="{Binding ListSummary}">
+                <controls:SettingsExpander.Footer>
+                    <ComboBox MinWidth="200" ItemsSource="{Binding ListNames}"
+                              SelectedIndex="{Binding ListIndex, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8A5;}"
                                        Header="名单文件"
                                        Description="{Binding RosterSummary}">
                 <controls:SettingsExpander.Footer>
@@ -262,7 +271,7 @@
 
             <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE699;}"
                                        Header="文字抽选用单独名单"
-                                       Description="开启后读插件配置目录下的「名单-文字.txt」，和主名单互不影响。">
+                                       Description="开启后读同一序号旁边的「listN-文字.txt」，和主名单互不影响。">
                 <controls:SettingsExpander.Footer>
                     <ToggleSwitch IsChecked="{Binding SeparateTextRoster, Mode=TwoWay}"/>
                 </controls:SettingsExpander.Footer>

@@ -14,10 +14,16 @@ namespace ClassIsland.RandomPicker.Services;
 /// <remarks>
 /// 名单就是一个纯文本文件，一行一个名字。没有引号、没有 JSON、没有转义，
 /// 用记事本就能改。空行和以 <c>#</c> 开头的行会被忽略，重复的名字只算一个。
+/// <para/>
+/// 还有一种特殊行：<c>&amp;$高一5班$</c> —— 给这份名单起个名字，用在菜单和设置页上。
+/// 它不算人名，也不会被抽到。
 /// </remarks>
 public class RosterService
 {
-    private readonly string _rosterPath;
+    /// <summary>起名行的前缀，配合结尾的 <c>$</c> 成对使用。</summary>
+    private const string TitlePrefix = "&$";
+
+    private string _rosterPath;
     private FileSystemWatcher? _watcher;
     private List<string> _names = new();
 
@@ -35,8 +41,33 @@ public class RosterService
     /// <summary>当前名单。</summary>
     public IReadOnlyList<string> Names => _names;
 
+    /// <summary>名单自己声明的名字（<c>&amp;$…$</c> 那一行）。没写过就是 <c>null</c>。</summary>
+    public string? Title { get; private set; }
+
     /// <summary>名单文件发生变化并重新载入后触发。</summary>
     public event EventHandler? RosterChanged;
+
+    /// <summary>
+    /// 换一份名单文件，还是这个实例。
+    /// </summary>
+    /// <remarks>
+    /// 不新建实例是因为悬浮球和设置页都订阅着 <see cref="RosterChanged"/>，
+    /// 换实例等于把订阅全弄丢，还得让每个订阅方都重新挂一遍。
+    /// </remarks>
+    public void SwitchTo(string rosterPath)
+    {
+        if (string.Equals(_rosterPath, rosterPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        StopWatching();
+        _rosterPath = rosterPath;
+        EnsureRosterFile();
+        Reload();
+        StartWatching();
+        RosterChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     private void EnsureRosterFile()
     {
@@ -56,6 +87,7 @@ public class RosterService
         [
             "# 一行一个名字，保存后自动生效。",
             "# 以 # 开头的行和空行会被忽略。",
+            "# 想给这份名单起个名字，随便写一行：&$高一5班$",
             "",
             "张三",
             "李四",
@@ -74,16 +106,95 @@ public class RosterService
                 ? File.ReadAllLines(_rosterPath, Encoding.UTF8)
                 : [];
 
-            _names = lines
-                .Select(x => x.Trim())
-                .Where(x => x.Length > 0 && !x.StartsWith('#'))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+            string? title = null;
+            var names = new List<string>();
+
+            foreach (var raw in lines)
+            {
+                var line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                if (TryParseTitle(line, out var parsed))
+                {
+                    // 名字只认第一处，后面重复写的当普通行忽略掉。
+                    title ??= parsed;
+                    continue;
+                }
+
+                // 以 &$ 开头却解析不出名字的，是想写起名行但写坏了。
+                // 当成人名留在名单里没好处——真被抽出来就是个古怪的字符串。
+                if (line.StartsWith(TitlePrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                names.Add(line);
+            }
+
+            Title = title;
+            _names = names.Distinct(StringComparer.Ordinal).ToList();
         }
         catch (IOException)
         {
             // 多半是保存的瞬间被占用了，保留上一次的名单，下一次变更再读。
         }
+    }
+
+    /// <summary>
+    /// 认一下这一行是不是「给名单起名」：<c>&amp;$名字$</c>。
+    /// </summary>
+    private static bool TryParseTitle(string line, out string title)
+    {
+        title = string.Empty;
+
+        // 最短也得是 &$x$ 这种 4 个字符。
+        if (line.Length < 4 ||
+            !line.StartsWith(TitlePrefix, StringComparison.Ordinal) ||
+            line[^1] != '$')
+        {
+            return false;
+        }
+
+        title = line[TitlePrefix.Length..^1].Trim();
+        return title.Length > 0;
+    }
+
+    /// <summary>
+    /// 只读出名单名，不建实例。
+    /// </summary>
+    /// <remarks>菜单里一次要问五份名单，为这个各建一个带文件监视的实例太重了。</remarks>
+    public static string? PeekTitle(string rosterPath)
+    {
+        try
+        {
+            if (!File.Exists(rosterPath))
+            {
+                return null;
+            }
+
+            foreach (var raw in File.ReadAllLines(rosterPath, Encoding.UTF8))
+            {
+                var line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                if (TryParseTitle(line, out var title))
+                {
+                    return title;
+                }
+            }
+        }
+        catch (IOException)
+        {
+            // 读不出来就当没名字。
+        }
+
+        return null;
     }
 
     private void StartWatching()
@@ -109,6 +220,21 @@ public class RosterService
         {
             // 监视不了就算了，右键菜单里还有「重新加载名单」。
         }
+    }
+
+    private void StopWatching()
+    {
+        if (_watcher is null)
+        {
+            return;
+        }
+
+        _watcher.EnableRaisingEvents = false;
+        _watcher.Changed -= OnFileTouched;
+        _watcher.Created -= OnFileTouched;
+        _watcher.Renamed -= OnFileTouched;
+        _watcher.Dispose();
+        _watcher = null;
     }
 
     private void OnFileTouched(object sender, FileSystemEventArgs e)
@@ -253,18 +379,5 @@ public class RosterService
             settings.DrawnThisRound.Contains(x, StringComparer.Ordinal)));
     }
 
-    public void Dispose()
-    {
-        if (_watcher is null)
-        {
-            return;
-        }
-
-        _watcher.EnableRaisingEvents = false;
-        _watcher.Changed -= OnFileTouched;
-        _watcher.Created -= OnFileTouched;
-        _watcher.Renamed -= OnFileTouched;
-        _watcher.Dispose();
-        _watcher = null;
-    }
+    public void Dispose() => StopWatching();
 }

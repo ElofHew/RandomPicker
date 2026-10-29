@@ -92,6 +92,12 @@ var chosen = remaining[RandomNumberGenerator.GetInt32(remaining.Count)];
 全部存在插件配置目录的 `settings.json` 里。老配置没有 `RecentPicks`，
 `PickerSettings.Normalize()` 会从 `LastPicked` 补一条，升级后第一次抽仍然避开刚抽过的那个。
 
+**换名单会清空 `DrawnThisRound`**：那些名字属于上一份名单，留着只会让「本轮还剩几个」算错。
+`RecentPicks` 之类不清——「刚抽过谁」跨名单仍然有意义。
+
+名单库见 `NameListLibrary`：5 份名单固定叫 `namelib/list1.txt` ~ `list5.txt`，
+名字写在文件里（`&$高一5班$`），所以改名不用动文件名，也不影响「当前用第几份」这个记忆。
+
 ## 拍照模式
 
 见 [photo-detection.md](photo-detection.md)。它不参与上面这套轮次 / 权重逻辑，

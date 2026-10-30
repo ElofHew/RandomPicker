@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.IO;
 
 namespace ClassIsland.RandomPicker.Services;
@@ -9,7 +8,7 @@ namespace ClassIsland.RandomPicker.Services;
 /// </summary>
 /// <remarks>
 /// 文件名固定是 <c>list1.txt</c> ~ <c>list5.txt</c>，<b>不跟着名单名走</b>。
-/// 名字写在文件内容里（<c>&amp;$高一5班$</c>），所以改名字只改一行字，
+/// 名字写在文件内容里（<c>@//高一5班/</c>），所以改名字只改一行字，
 /// 不用重命名文件，「当前选中第几份」这个记忆也不会因为改名而错位。
 /// <para/>
 /// 开了「文字抽选用单独名单」时，那份是同一序号旁边的 <c>listN-文字.txt</c>。
@@ -93,12 +92,16 @@ public sealed class NameListLibrary
     /// <param name="maxTitleChars">
     /// 名字最多显示几个字，超出的截断并加省略号。传 0 或负数表示不限。
     /// </param>
-    /// <returns>有名字时是「1 - 高一5班」，没有名字就只是「1」。</returns>
+    /// <returns>有名字时就是名字本身，没名字时是「名单1」这种默认叫法。</returns>
+    /// <remarks>
+    /// <b>有名字时不带序号。</b>名字本来就是给人认的（「高一5班」比「1 - 高一5班」清爽），
+    /// 序号只在用户还没起名时用来区分——那种时候没有别的信息可显示。
+    /// </remarks>
     public static string Label(int slot, string? title, int maxTitleChars)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
-            return slot.ToString(CultureInfo.InvariantCulture);
+            return $"名单{slot}";
         }
 
         var text = title.Trim();
@@ -107,6 +110,6 @@ public sealed class NameListLibrary
             text = text[..maxTitleChars] + "…";
         }
 
-        return $"{slot} - {text}";
+        return text;
     }
 }

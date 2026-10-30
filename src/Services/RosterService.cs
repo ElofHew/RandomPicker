@@ -15,13 +15,20 @@ namespace ClassIsland.RandomPicker.Services;
 /// 名单就是一个纯文本文件，一行一个名字。没有引号、没有 JSON、没有转义，
 /// 用记事本就能改。空行和以 <c>#</c> 开头的行会被忽略，重复的名字只算一个。
 /// <para/>
-/// 还有一种特殊行：<c>&amp;$高一5班$</c> —— 给这份名单起个名字，用在菜单和设置页上。
-/// 它不算人名，也不会被抽到。
+/// 还有一种特殊行：<c>@//高一5班/</c> —— 给这份名单起个名字，用在菜单和设置页上。
+/// 它不算人名，也不会被抽到。旧的 <c>&amp;$高一5班$</c> 写法照样认，免得升级后
+/// 用户已经写好的名字突然失效；但提示和示例里只出现新写法。
 /// </remarks>
 public class RosterService
 {
-    /// <summary>起名行的前缀，配合结尾的 <c>$</c> 成对使用。</summary>
-    private const string TitlePrefix = "&$";
+    /// <summary>起名行的开头。后面跟 <c>//</c>、名字、结尾的 <c>/</c>。</summary>
+    private const char TitleStart = '@';
+
+    /// <summary>名字两边的包裹符。</summary>
+    private const string TitleWrapper = "//";
+
+    /// <summary>升级前的老写法，只读不写。</summary>
+    private const string LegacyTitlePrefix = "&$";
 
     private string _rosterPath;
     private FileSystemWatcher? _watcher;
@@ -41,7 +48,7 @@ public class RosterService
     /// <summary>当前名单。</summary>
     public IReadOnlyList<string> Names => _names;
 
-    /// <summary>名单自己声明的名字（<c>&amp;$…$</c> 那一行）。没写过就是 <c>null</c>。</summary>
+    /// <summary>名单自己声明的名字（<c>@//…/</c> 那一行）。没写过就是 <c>null</c>。</summary>
     public string? Title { get; private set; }
 
     /// <summary>名单文件发生变化并重新载入后触发。</summary>
@@ -69,31 +76,84 @@ public class RosterService
         RosterChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// 文件不在、或者文件在但一个名字都没有时，写一份带说明的示例进去。
+    /// </summary>
+    /// <remarks>
+    /// 只在构造函数和 <see cref="SwitchTo"/> 里调，也就是「刚打开这份名单」时。
+    /// 运行中把名字全删了不会马上被填回来——那是用户自己的操作，
+    /// 立刻覆盖掉会让人以为编辑器没保存成功。
+    /// </remarks>
     private void EnsureRosterFile()
     {
-        if (File.Exists(_rosterPath))
+        try
         {
-            return;
-        }
+            var dir = Path.GetDirectoryName(_rosterPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
 
-        var dir = Path.GetDirectoryName(_rosterPath);
-        if (!string.IsNullOrEmpty(dir))
+            if (File.Exists(_rosterPath) && HasAnyName())
+            {
+                return;
+            }
+
+            File.WriteAllText(_rosterPath, Template, new UTF8Encoding(false));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            Directory.CreateDirectory(dir);
+            // 写不进去就算了，后面 Reload 读到空名单，球上会显示「空」。
         }
-
-        // 首次运行给一份带说明的示例，用户直接往下写名字就行。
-        File.WriteAllText(_rosterPath, string.Join(Environment.NewLine,
-        [
-            "# 一行一个名字，保存后自动生效。",
-            "# 以 # 开头的行和空行会被忽略。",
-            "# 想给这份名单起个名字，随便写一行：&$高一5班$",
-            "",
-            "张三",
-            "李四",
-            "王五"
-        ]), new UTF8Encoding(false));
     }
+
+    /// <summary>文件里有没有至少一个能抽的名字。</summary>
+    private bool HasAnyName()
+    {
+        foreach (var raw in File.ReadAllLines(_rosterPath, Encoding.UTF8))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#'))
+            {
+                continue;
+            }
+
+            if (TryParseTitle(line, out _) || line.StartsWith(TitleStart))
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 首次运行给的示例。十个人是为了让人一眼看出「格式就是这样，往下加」，
+    /// 三个人的话容易以为是写死的。
+    /// </summary>
+    /// <remarks>
+    /// 用 <see cref="Environment.NewLine"/> 拼，落地就是 CRLF——
+    /// 老版本记事本只认 CRLF，写成 LF 会挤成一整行。
+    /// </remarks>
+    private static readonly string Template = string.Join(Environment.NewLine,
+    [
+        "# 一行一个名字，保存后自动生效。",
+        "# 以 # 开头的行和空行会被忽略。",
+        "# 想给这份名单起个名字，在开头写一行：@//高一5班/",
+        "",
+        "张三",
+        "李四",
+        "王五",
+        "赵六",
+        "钱七",
+        "孙八",
+        "周九",
+        "吴十",
+        "郑十一",
+        "王十二"
+    ]);
 
     /// <summary>
     /// 重新读取名单文件。
@@ -124,9 +184,9 @@ public class RosterService
                     continue;
                 }
 
-                // 以 &$ 开头却解析不出名字的，是想写起名行但写坏了。
+                // 以 @ 开头却解析不出名字的，是想写起名行但写坏了。
                 // 当成人名留在名单里没好处——真被抽出来就是个古怪的字符串。
-                if (line.StartsWith(TitlePrefix, StringComparison.Ordinal))
+                if (line.StartsWith(TitleStart))
                 {
                     continue;
                 }
@@ -144,21 +204,52 @@ public class RosterService
     }
 
     /// <summary>
-    /// 认一下这一行是不是「给名单起名」：<c>&amp;$名字$</c>。
+    /// 认一下这一行是不是「给名单起名」：<c>@//名字/</c>。
     /// </summary>
+    /// <remarks>
+    /// <c>@</c> 后面紧跟的空格会自动去掉（<c>@ //高一5班/</c> 也认），
+    /// 手滑多敲一个空格不至于让名字消失。名字两边的 <c>//</c> 和 <c>/</c> 必须成对出现，
+    /// 少了任何一个都当写坏了——返回 false，调用方会把整行跳过，不会当成名字抽出来。
+    /// </remarks>
     private static bool TryParseTitle(string line, out string title)
+    {
+        title = string.Empty;
+
+        if (line.StartsWith(TitleStart))
+        {
+            var body = line[1..].TrimStart();
+            if (body.StartsWith(TitleWrapper, StringComparison.Ordinal) &&
+                body.Length >= TitleWrapper.Length + 2 &&
+                body[^1] == TitleWrapper[0])
+            {
+                var name = body[TitleWrapper.Length..^1].Trim();
+                if (name.Length > 0)
+                {
+                    title = name;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return TryParseLegacyTitle(line, out title);
+    }
+
+    /// <summary>升级前的 <c>&amp;$名字$</c> 写法，只为了不把老用户写好的名字弄丢。</summary>
+    private static bool TryParseLegacyTitle(string line, out string title)
     {
         title = string.Empty;
 
         // 最短也得是 &$x$ 这种 4 个字符。
         if (line.Length < 4 ||
-            !line.StartsWith(TitlePrefix, StringComparison.Ordinal) ||
+            !line.StartsWith(LegacyTitlePrefix, StringComparison.Ordinal) ||
             line[^1] != '$')
         {
             return false;
         }
 
-        title = line[TitlePrefix.Length..^1].Trim();
+        title = line[LegacyTitlePrefix.Length..^1].Trim();
         return title.Length > 0;
     }
 

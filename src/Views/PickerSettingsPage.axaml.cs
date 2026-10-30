@@ -395,7 +395,7 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
             var title = _service.Library.PeekTitle(slot);
             var name = NameListLibrary.Label(slot, title, 0);
 
-            return $"当前第 {name}\n想给名单起名字，在文件里写一行 &$高一5班$ 就行。";
+            return $"当前用的是「{name}」。\n想给名单起名字，在文件开头写一行 @//高一5班/ 就行。";
         }
     }
 
@@ -408,7 +408,7 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
     {
         while (ListNames.Count < NameListLibrary.SlotCount)
         {
-            ListNames.Add((ListNames.Count + 1).ToString());
+            ListNames.Add($"名单{ListNames.Count + 1}");
         }
 
         for (var slot = 1; slot <= NameListLibrary.SlotCount; slot++)

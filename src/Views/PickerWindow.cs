@@ -605,7 +605,7 @@ public class PickerWindow : Window
     }
 
     /// <summary>
-    /// 「选择名单文件」的子项：五份名单，有名字的写成「1 - 高一5班」。
+    /// 「选择名单文件」的子项：五份名单，有名字的显示名字，没名字的显示「名单1」。
     /// </summary>
     /// <remarks>
     /// 名字最多显示 <see cref="MenuTitleChars"/> 个字——菜单宽度有限，长名字会把整条撑开，

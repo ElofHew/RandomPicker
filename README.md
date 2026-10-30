@@ -160,6 +160,14 @@ ClassIsland 的随机抽选插件。桌面上一个小球，点一下就从名�
 球上那行小字：打开人数显示时，抽人写 `4/30 人`、抽组写 `2/6 组`（放回模式只写总数）；
 关掉后改显示 `不放回` 或 `放回`。拍照模式两种情况下都写「拍照」。
 
+## 遇到问题
+
+- **插件本身出问题**：<https://github.com/Gordonynh/RandomPicker/issues/new/choose>，
+  选「问题反馈」，把版本号和复现步骤填上。
+- **ClassIsland 本身的问题**（课程表、提醒、主题）：请提到
+  <https://github.com/ClassIsland/ClassIsland/issues>。
+- 装之前先看一眼 [docs/build.md](docs/build.md) 里的环境要求。
+
 ## 开源信息
 
 - 仓库：<https://github.com/Gordonynh/RandomPicker>　·　MIT 协议

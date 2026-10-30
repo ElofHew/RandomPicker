@@ -395,7 +395,7 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
             var title = _service.Library.PeekTitle(slot);
             var name = NameListLibrary.Label(slot, title, 0);
 
-            return $"当前用的是「{name}」。\n想给名单起名字，在文件开头写一行 @//高一5班/ 就行。";
+            return $"当前用的是「{name}」。\n想给名单起名字，在文件开头写一行 @高一5班 就行。";
         }
     }
 

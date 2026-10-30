@@ -15,20 +15,13 @@ namespace ClassIsland.RandomPicker.Services;
 /// 名单就是一个纯文本文件，一行一个名字。没有引号、没有 JSON、没有转义，
 /// 用记事本就能改。空行和以 <c>#</c> 开头的行会被忽略，重复的名字只算一个。
 /// <para/>
-/// 还有一种特殊行：<c>@//高一5班/</c> —— 给这份名单起个名字，用在菜单和设置页上。
-/// 它不算人名，也不会被抽到。旧的 <c>&amp;$高一5班$</c> 写法照样认，免得升级后
-/// 用户已经写好的名字突然失效；但提示和示例里只出现新写法。
+/// 还有一种特殊行：<c>@高一5班</c> —— 给这份名单起个名字，用在菜单和设置页上。
+/// 它不算人名，也不会被抽到。
 /// </remarks>
 public class RosterService
 {
-    /// <summary>起名行的开头。后面跟 <c>//</c>、名字、结尾的 <c>/</c>。</summary>
+    /// <summary>起名行的开头，后面直接跟名字。</summary>
     private const char TitleStart = '@';
-
-    /// <summary>名字两边的包裹符。</summary>
-    private const string TitleWrapper = "//";
-
-    /// <summary>升级前的老写法，只读不写。</summary>
-    private const string LegacyTitlePrefix = "&$";
 
     private string _rosterPath;
     private FileSystemWatcher? _watcher;
@@ -48,7 +41,7 @@ public class RosterService
     /// <summary>当前名单。</summary>
     public IReadOnlyList<string> Names => _names;
 
-    /// <summary>名单自己声明的名字（<c>@//…/</c> 那一行）。没写过就是 <c>null</c>。</summary>
+    /// <summary>名单自己声明的名字（<c>@…</c> 那一行）。没写过就是 <c>null</c>。</summary>
     public string? Title { get; private set; }
 
     /// <summary>名单文件发生变化并重新载入后触发。</summary>
@@ -141,7 +134,7 @@ public class RosterService
     [
         "# 一行一个名字，保存后自动生效。",
         "# 以 # 开头的行和空行会被忽略。",
-        "# 想给这份名单起个名字，在开头写一行：@//高一5班/",
+        "# 想给这份名单起个名字，在开头写一行：@高一5班",
         "",
         "张三",
         "李四",
@@ -204,52 +197,24 @@ public class RosterService
     }
 
     /// <summary>
-    /// 认一下这一行是不是「给名单起名」：<c>@//名字/</c>。
+    /// 认一下这一行是不是「给名单起名」：<c>@名字</c>。
     /// </summary>
     /// <remarks>
-    /// <c>@</c> 后面紧跟的空格会自动去掉（<c>@ //高一5班/</c> 也认），
-    /// 手滑多敲一个空格不至于让名字消失。名字两边的 <c>//</c> 和 <c>/</c> 必须成对出现，
-    /// 少了任何一个都当写坏了——返回 false，调用方会把整行跳过，不会当成名字抽出来。
+    /// <c>@</c> 后面紧跟的空格会自动去掉（<c>@ 高一5班</c> 也认），
+    /// 手滑多敲一个空格不至于让名字消失；名字两端也 Trim。
+    /// 光一个 <c>@</c>、后面什么都没有的算写坏了——返回 false，
+    /// 调用方会把整行跳过，不会当成名字抽出来。
     /// </remarks>
     private static bool TryParseTitle(string line, out string title)
     {
         title = string.Empty;
 
-        if (line.StartsWith(TitleStart))
-        {
-            var body = line[1..].TrimStart();
-            if (body.StartsWith(TitleWrapper, StringComparison.Ordinal) &&
-                body.Length >= TitleWrapper.Length + 2 &&
-                body[^1] == TitleWrapper[0])
-            {
-                var name = body[TitleWrapper.Length..^1].Trim();
-                if (name.Length > 0)
-                {
-                    title = name;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return TryParseLegacyTitle(line, out title);
-    }
-
-    /// <summary>升级前的 <c>&amp;$名字$</c> 写法，只为了不把老用户写好的名字弄丢。</summary>
-    private static bool TryParseLegacyTitle(string line, out string title)
-    {
-        title = string.Empty;
-
-        // 最短也得是 &$x$ 这种 4 个字符。
-        if (line.Length < 4 ||
-            !line.StartsWith(LegacyTitlePrefix, StringComparison.Ordinal) ||
-            line[^1] != '$')
+        if (!line.StartsWith(TitleStart))
         {
             return false;
         }
 
-        title = line[LegacyTitlePrefix.Length..^1].Trim();
+        title = line[1..].Trim();
         return title.Length > 0;
     }
 

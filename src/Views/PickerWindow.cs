@@ -238,6 +238,7 @@ public class PickerWindow : Window
         if (_settings.Mode == PickMode.Group)
         {
             // 抽组跟名单也无关，显示的是「还剩几组 / 共几组」。
+            // 组数不叠人数偏移——那是「小组总数」算出来的，不存在「实际有多少」。
             var groups = GroupPicker.Labels(_settings).Count;
             _counter.Text = _settings.IsNoRepeat
                 ? $"{GroupPicker.RemainingInRound(_settings)}/{groups} 组"
@@ -245,7 +246,9 @@ public class PickerWindow : Window
             return;
         }
 
-        var total = _roster.Names.Count;
+        // 走 DisplayCount：抽选永远用真实名单，只有这两个数字会被偏移。
+        var remaining = _settings.DisplayCount(_roster.RemainingInRound(_settings));
+        var total = _settings.DisplayCount(_roster.Names.Count);
         if (total == 0)
         {
             _counter.Text = "空";
@@ -254,7 +257,7 @@ public class PickerWindow : Window
 
         // 不放回显示「本轮还剩几个」，放回没有轮次概念，显示总人数。
         _counter.Text = _settings.IsNoRepeat
-            ? $"{_roster.RemainingInRound(_settings)}/{total} 人"
+            ? $"{remaining}/{total} 人"
             : $"{total} 人";
     }
 

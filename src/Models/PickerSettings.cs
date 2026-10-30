@@ -128,6 +128,32 @@ public class PickerSettings
 
     #endregion
 
+    /// <summary>
+    /// 显示人数时最多偏移多少。滑块范围就是 ±这个值。
+    /// </summary>
+    public const int MaxCountOffset = 20;
+
+    /// <summary>
+    /// 显示人数时的偏移量：<b>显示 = 实际 + 这个值</b>。
+    /// </summary>
+    /// <remarks>
+    /// 只影响「显示」，抽选时用的永远是真实名单。用途是让球上那个数字和真实人数对不上，
+    /// 比如从名单里删掉几个人又不想让底下的人从人数变化推出来。
+    /// <para/>
+    /// <b>抽组不受影响</b>：组数是「小组总数」这个设置算出来的，不存在「实际有多少」，
+    /// 叠偏移只会让组名和数字互相矛盾。
+    /// </remarks>
+    public int CountOffset { get; set; }
+
+    /// <summary>
+    /// 把实际人数换算成要显示的人数。
+    /// </summary>
+    /// <remarks>
+    /// 结果夹到不小于 0：偏移量是用户随手拖的，拖到「比实际人数还多」的时候
+    /// 会出现负数，界面上写「-3 人」比写「0 人」更不像话。
+    /// </remarks>
+    public int DisplayCount(int actual) => Math.Max(0, actual + CountOffset);
+
     /// <summary>悬浮球大小档位。</summary>
     public PickerSize Size { get; set; } = PickerSize.Medium;
 
@@ -388,6 +414,7 @@ public class PickerSettings
 
         Size = other.Size;
         ShowPickerCount = other.ShowPickerCount;
+        CountOffset = other.CountOffset;
         Hidden = other.Hidden;
         ShowCenterReveal = other.ShowCenterReveal;
         ShowNotification = other.ShowNotification;
@@ -459,6 +486,7 @@ public class PickerSettings
 
         s.PickCount = Math.Clamp(s.PickCount, 1, 3);
         s.GroupCount = Math.Clamp(s.GroupCount, 1, MaxGroups);
+        s.CountOffset = Math.Clamp(s.CountOffset, -MaxCountOffset, MaxCountOffset);
 
         // 名单份数是 NameListLibrary.SlotCount，这里不引用它是为了不让模型层依赖服务层。
         s.SelectedList = Math.Clamp(s.SelectedList, 1, 5);

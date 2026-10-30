@@ -7,7 +7,7 @@
         <StackPanel Classes="settings-container animated-intro">
 
             <TextBlock Classes="l-instructive" TextWrapping="Wrap"
-                       Text="下面这些和悬浮球右键菜单是同一批设置，改哪边都一样。再往下是拍照抽人的详细参数。"/>
+                       Text="下面这些和悬浮球右键菜单是同一批设置，改哪边都一样。再往下是拍照抽人的详细参数，最后是人数显示相关的开关。"/>
 
             <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE812;}"
                                        Header="显示悬浮窗"
@@ -301,6 +301,23 @@
                                        Description="默认关闭。不保存时照片仅在内存中处理。">
                 <controls:SettingsExpander.Footer>
                     <ToggleSwitch IsChecked="{Binding SavePhotos, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xE817;" Text="显示与抽取" Margin="0 0 0 4"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE817;}"
+                                       Header="人数偏移"
+                                       Description="{Binding CountOffsetSummary}">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="200" Minimum="-20" Maximum="20" TickFrequency="1"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding CountOffset, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="40"
+                                   Text="{Binding CountOffsetText}"/>
+                    </StackPanel>
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 

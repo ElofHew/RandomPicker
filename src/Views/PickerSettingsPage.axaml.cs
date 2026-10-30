@@ -221,8 +221,9 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
             }
 
             return Settings.IsNoRepeat
-                ? $"共 {_service.RosterCount} 人，本轮还剩 {_service.RemainingInRound} 人。"
-                : $"共 {_service.RosterCount} 人。放回模式下重置的是降权记录。";
+                ? $"共 {Settings.DisplayCount(_service.RosterCount)} 人，本轮还剩 " +
+                  $"{Settings.DisplayCount(_service.RemainingInRound)} 人。"
+                : $"共 {Settings.DisplayCount(_service.RosterCount)} 人。放回模式下重置的是降权记录。";
         }
     }
 
@@ -401,7 +402,7 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
 
     public string RosterSummary => _service is null
         ? "插件未就绪。"
-        : $"{_service.RosterPath}\n共 {_service.RosterCount} 人，一行一个名字，保存后立即生效。";
+        : $"{_service.RosterPath}\n共 {Settings.DisplayCount(_service.RosterCount)} 人，一行一个名字，保存后立即生效。";
 
     /// <summary>重读五份名单的名字，填进下拉框。</summary>
     private void RefreshListNames()
@@ -420,6 +421,52 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
 
     private void RaiseListState() =>
         Raise(nameof(ListIndex), nameof(ListSummary), nameof(RosterSummary), nameof(RoundSummary));
+
+    #endregion
+
+    #region 显示与抽取
+
+    /// <summary>
+    /// 显示人数偏移，滑块 -20 ~ +20。
+    /// </summary>
+    /// <remarks>
+    /// <b>只改显示，不改抽选。</b>抽的时候永远用真实名单，这个值只影响球上和设置页里
+    /// 那些「一共多少人 / 还剩多少人」。改完立刻刷球，不用等下一次抽。
+    /// </remarks>
+    public int CountOffset
+    {
+        get => Settings.CountOffset;
+        set
+        {
+            var offset = Math.Clamp(value, -PickerSettings.MaxCountOffset, PickerSettings.MaxCountOffset);
+            if (offset == Settings.CountOffset)
+            {
+                return;
+            }
+
+            Settings.CountOffset = offset;
+            _service?.RefreshPickerWindow();
+            Save(nameof(CountOffset), nameof(CountOffsetText), nameof(CountOffsetSummary),
+                nameof(RosterSummary), nameof(RoundSummary));
+        }
+    }
+
+    public string CountOffsetText => Settings.CountOffset > 0
+        ? $"+{Settings.CountOffset}"
+        : Settings.CountOffset.ToString();
+
+    public string CountOffsetSummary
+    {
+        get
+        {
+            var actual = _service?.RosterCount ?? 0;
+            var shown = Settings.DisplayCount(actual);
+
+            return Settings.CountOffset == 0
+                ? $"显示 {shown} 人，和实际人数一致。"
+                : $"实际 {actual} 人，到处显示 {shown} 人。抽组时组数不叠加偏移。";
+        }
+    }
 
     #endregion
 

@@ -510,15 +510,13 @@ public class PickerWindow : Window
     private const string ListGroup = "picker.list";
 
     /// <summary>
-    /// 菜单内容。每次打开都重新构建，勾选状态和人数才是当前的。
+    /// 菜单内容。每次打开都重新构建，勾选状态和总数才是当前的。
     /// </summary>
     private object[] BuildMenuItems()
     {
-        var total = _roster.Names.Count;
-
         object[] items =
         [
-            Header($"共 {total} 人"),
+            Header(TotalText()),
             Item("抽一个", () => PickRequested?.Invoke(this, EventArgs.Empty)),
             new Separator(),
 
@@ -602,6 +600,29 @@ public class PickerWindow : Window
 
         WireRadioGroups(items);
         return items;
+    }
+
+    /// <summary>
+    /// 菜单顶上那行的总数，跟着「当前抽什么」走。
+    /// </summary>
+    /// <remarks>
+    /// 抽组时是组数、抽人时是<b>当前这份名单</b>的人数——换名单、改组数都会立刻反映出来，
+    /// 因为菜单每次打开都重新构建，这里读的也都是活数据。
+    /// <para/>
+    /// 拍照抽人不显示数字：抽的范围是拍到的画面，人数得等按下快门才知道，
+    /// 这时候写「共 30 人」会让人以为还是按名单在抽。
+    /// </remarks>
+    private string TotalText()
+    {
+        switch (_settings.Mode)
+        {
+            case PickMode.Photo:
+                return "拍照抽人（不读名单）";
+            case PickMode.Group:
+                return $"共 {GroupPicker.Labels(_settings).Count} 组";
+            default:
+                return $"共 {_roster.Names.Count} 人";
+        }
     }
 
     /// <summary>

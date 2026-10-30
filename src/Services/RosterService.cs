@@ -149,6 +149,22 @@ public class RosterService
     ]);
 
     /// <summary>
+    /// 重读文件，并且把文件监视器整个重开一遍。
+    /// </summary>
+    /// <remarks>
+    /// 和 <see cref="Reload"/> 的区别在这里：监视器有可能已经死了（网络盘断开、
+    /// 文件被别的程序独占过、目录被临时删掉又建回来），那种情况下光是重读，
+    /// 之后改文件就再也不会有反应。「刷新插件状态」走的是这一条。
+    /// </remarks>
+    public void Refresh()
+    {
+        StopWatching();
+        Reload();
+        StartWatching();
+        RosterChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
     /// 重新读取名单文件。
     /// </summary>
     public void Reload()
@@ -415,12 +431,6 @@ public class RosterService
         }
 
         return remaining;
-    }
-
-    /// <summary>「不重复」模式下手动开始新一轮。</summary>
-    public static void ResetRound(PickerSettings settings)
-    {
-        settings.DrawnThisRound.Clear();
     }
 
     /// <summary>本轮还剩多少人没抽到。</summary>

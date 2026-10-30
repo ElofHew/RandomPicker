@@ -50,6 +50,15 @@ public class PickerWindow : Window
     /// <summary>设置菜单。复用同一个实例，每次打开前换 ItemsSource。</summary>
     private MenuFlyout? _menu;
 
+    /// <summary>
+    /// 菜单顶上「共 N 人 / 共 N 组」那一项。
+    /// </summary>
+    /// <remarks>
+    /// 留着引用是为了能就地改字：菜单开着的时候状态被改（比如从设置页切了名单），
+    /// 只重建菜单不够——那个菜单已经关掉了。为空表示当前没开菜单或还没建过。
+    /// </remarks>
+    private MenuItem? _totalItem;
+
     /// <summary>当前被本窗口捕获的指针。长按弹菜单前要把它放掉。</summary>
     private IPointer? _capturedPointer;
 
@@ -143,6 +152,9 @@ public class PickerWindow : Window
         PositionChanged += (_, _) => ClampToScreen();
 
         _roster.RosterChanged += (_, _) => Dispatcher.UIThread.Post(RefreshCounter);
+
+        // 范围一变就自己重算一遍；宿主另外会订阅同一个事件去存盘。
+        PoolChanged += (_, _) => RefreshTotals();
     }
 
     /// <summary>用户请求抽一次（抽人或抽组）。</summary>
@@ -150,6 +162,22 @@ public class PickerWindow : Window
 
     /// <summary>设置被菜单改动，需要持久化。</summary>
     public event EventHandler? SettingsChanged;
+
+    /// <summary>
+    /// 能抽的东西变了：换来源（人 / 组 / 拍照）、换放回模式、换名单。
+    /// </summary>
+    /// <remarks>
+    /// 这些改动都会影响「共 N 人 / 共 N 组」，所以订阅方要重算一遍——
+    /// 窗口自己重算球上的字和菜单顶上那行，宿主顺手存盘。
+    /// 换名字不算，那是文本层面的事，范围没变。
+    /// </remarks>
+    public event EventHandler? PoolChanged;
+
+    /// <summary>用户要求「重置本轮」。放回 / 不放回的处理不一样，交给宿主统一做。</summary>
+    public event EventHandler? RoundResetRequested;
+
+    /// <summary>用户要求把插件从磁盘重读一遍（刷新插件状态）。</summary>
+    public event EventHandler? RefreshRequested;
 
     /// <summary>用户要求换一份名单。参数是序号（1 ~ 5）。</summary>
     public event EventHandler<int>? ListChangeRequested;
@@ -188,6 +216,23 @@ public class PickerWindow : Window
         _label.FontSize = d * 0.30;
         _counter.FontSize = d * 0.155;
         ClampToScreen();
+    }
+
+    /// <summary>
+    /// 把「有多少可抽」相关的显示一起重算：球上那行字，以及菜单顶上的总数。
+    /// </summary>
+    /// <remarks>
+    /// 换来源、换名单、换放回模式都会走到这里。菜单开着的时候直接改那一项的文字，
+    /// 因为重建菜单得等下次打开，用户会觉得点了没反应。
+    /// </remarks>
+    public void RefreshTotals()
+    {
+        RefreshCounter();
+
+        if (_totalItem is not null)
+        {
+            _totalItem.Header = TotalText();
+        }
     }
 
     /// <summary>刷新圆钮上的那行小字。</summary>
@@ -514,9 +559,12 @@ public class PickerWindow : Window
     /// </summary>
     private object[] BuildMenuItems()
     {
+        // 顶上那一行要能就地改（换名单 / 换来源时 RefreshTotals 直接换字），所以留个引用。
+        _totalItem = Header(TotalText());
+
         object[] items =
         [
-            Header(TotalText()),
+            _totalItem,
             Item("抽一个", () => PickRequested?.Invoke(this, EventArgs.Empty)),
             new Separator(),
 
@@ -546,13 +594,7 @@ public class PickerWindow : Window
                 Choice("数字", GroupStyleGroup, _settings.GroupStyle == GroupStyle.Number,
                     () => SetGroupStyle(GroupStyle.Number))
             ]),
-            Item("重置本轮", () =>
-            {
-                RosterService.ResetRound(_settings);
-                GroupPicker.ResetRound(_settings);
-                RefreshCounter();
-                SettingsChanged?.Invoke(this, EventArgs.Empty);
-            }),
+            Item("重置本轮", () => RoundResetRequested?.Invoke(this, EventArgs.Empty)),
             new Separator(),
 
             Submenu("悬浮球大小",
@@ -588,11 +630,7 @@ public class PickerWindow : Window
             ]),
             new Separator(),
 
-            Item("重新加载名单", () =>
-            {
-                _roster.Reload();
-                RefreshCounter();
-            }),
+            Item("刷新插件状态", () => RefreshRequested?.Invoke(this, EventArgs.Empty)),
             Submenu("选择名单文件", BuildListItems()),
             Item("打开名单文件", OpenRosterFile),
             Item("打开插件设置", OpenPluginSettings)
@@ -642,7 +680,13 @@ public class PickerWindow : Window
             var label = NameListLibrary.Label(slot, _library.PeekTitle(slot), MenuTitleChars);
 
             items[slot - 1] = Choice(label, ListGroup, _settings.SelectedList == slot,
-                () => ListChangeRequested?.Invoke(this, target));
+                () =>
+                {
+                    ListChangeRequested?.Invoke(this, target);
+
+                    // 宿主是同步换完名单才返回的，这里抛出去的信号读到的是新名单的人数。
+                    PoolChanged?.Invoke(this, EventArgs.Empty);
+                });
         }
 
         return items;
@@ -793,8 +837,7 @@ public class PickerWindow : Window
     private void SetSource(PickMode source)
     {
         _settings.SetSource(source);
-        RefreshCounter();
-        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        PoolChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -808,8 +851,7 @@ public class PickerWindow : Window
     {
         _settings.GroupStyle = style;
         GroupPicker.ResetRound(_settings);
-        RefreshCounter();
-        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        PoolChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -821,8 +863,7 @@ public class PickerWindow : Window
     private void SetReplace(PickMode mode)
     {
         _settings.SetReplace(mode);
-        RefreshCounter();
-        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        PoolChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>一次抽几个。</summary>

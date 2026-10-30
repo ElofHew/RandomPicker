@@ -33,6 +33,7 @@ var chosen = remaining[RandomNumberGenerator.GetInt32(remaining.Count)];
    名单只剩一个人时挡不住，也没必要挡。
 
 手动「重置本轮」只清 `DrawnThisRound`，**不清「上一个人是谁」**，理由同上。
+（放回模式下这个按钮的含义不同，见下一节末尾。）
 
 ## 放回
 
@@ -68,6 +69,12 @@ var chosen = remaining[RandomNumberGenerator.GetInt32(remaining.Count)];
 .NET 8 没有 `RandomNumberGenerator.GetDouble()`，所以 `WeightedPicker.NextDouble()`
 自己取 8 字节、右移 11 位留 53 位尾数——精度和 `Random.NextDouble()` 一致，
 也不会因为对 int 取模产生偏斜。
+
+**「重置本轮」在放回模式下重置的是权重**：这里没有轮次可清，能清的是
+`RecentPicks` / `RecentGroups` 这份降权记忆（连同 `LastPicked` / `LastGroupPicked`）。
+清完之后所有人回到同一权重，等于重新开始积累「谁刚被抽过」。
+按钮文案两种模式都叫「重置本轮」，含义由 `PickerHostService.ResetRound()` 按
+`IsNoRepeat` 分流——菜单和设置页调的是同一个方法，不会两边不一致。
 
 ## 抽组
 

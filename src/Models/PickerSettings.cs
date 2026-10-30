@@ -171,7 +171,7 @@ public class PickerSettings
     /// 当前用第几份名单。1 ~ 5，对应配置目录下 <c>namelib/list1.txt</c> ~ <c>list5.txt</c>。
     /// </summary>
     /// <remarks>
-    /// 只记序号，不记名字：名字写在名单文件里（<c>&amp;$高一5班$</c>），
+    /// 只记序号，不记名字：名字写在名单文件里（<c>@高一5班</c>），
     /// 改名不该让「上次用的是哪份」错位。
     /// </remarks>
     public int SelectedList { get; set; } = 1;
@@ -327,9 +327,92 @@ public class PickerSettings
         }
     }
 
+    /// <summary>
+    /// 「重置本轮」。两种模式都叫这个名字，做的事不一样。
+    /// </summary>
+    /// <remarks>
+    /// <b>不放回</b>：就是字面意思——清掉本轮已抽的人和组，下一抽重新从头开始。
+    /// <para/>
+    /// <b>放回</b>：没有轮次可言，这里重置的是<b>权重</b>。放回靠「最近抽过的降权」来避免
+    /// 同一节课里有人被抽三次、有人一次没抽，抽久了那份记忆会让某些人「怎么都抽不到」，
+    /// 清掉它，所有人回到同一权重。
+    /// <para/>
+    /// 逻辑放在模型里而不是宿主里，是为了能单独跑测试——
+    /// 悬浮球右键菜单和设置页最终都走这一个入口，不会两边不一致。
+    /// </remarks>
+    public void ResetRound()
+    {
+        if (IsNoRepeat)
+        {
+            DrawnThisRound.Clear();
+            DrawnGroupsThisRound.Clear();
+            return;
+        }
+
+        RecentPicks.Clear();
+        RecentGroups.Clear();
+
+        // 「上一个是哪个」也一起清：它只在开新一轮时用来避开连抽，留着没有意义，
+        // 反而会让下一抽莫名其妙地漏掉一个人（或一个组）。
+        LastPicked = null;
+        LastGroupPicked = null;
+    }
+
     #endregion
 
     #region 读写
+
+    /// <summary>
+    /// 用另一份设置覆盖自己，<b>实例不变</b>。
+    /// </summary>
+    /// <remarks>
+    /// 「刷新插件状态」要从磁盘重读 <c>settings.json</c>，但悬浮球和设置页都攥着同一个实例，
+    /// 换成新对象等于把它们手里的引用作废。所以搬值，不换实例。
+    /// <para/>
+    /// 列表属性要<b>新拷一份</b>，不能直接赋值：那是从 <c>Load</c> 出来的临时对象，
+    /// 把它的 List 挂到长期存活的实例上，改起来会牵扯不清。
+    /// <para/>
+    /// <b>以后新增设置项记得在这儿补一行</b>——漏了不会报错，只会让刷新看起来「没生效」。
+    /// </remarks>
+    public void CopyFrom(PickerSettings other)
+    {
+        Mode = other.Mode;
+        TextMode = other.TextMode;
+        PickCount = other.PickCount;
+
+        GroupStyle = other.GroupStyle;
+        GroupCount = other.GroupCount;
+        DrawnGroupsThisRound = new List<string>(other.DrawnGroupsThisRound);
+        LastGroupPicked = other.LastGroupPicked;
+        RecentGroups = new List<string>(other.RecentGroups);
+
+        Size = other.Size;
+        ShowPickerCount = other.ShowPickerCount;
+        Hidden = other.Hidden;
+        ShowCenterReveal = other.ShowCenterReveal;
+        ShowNotification = other.ShowNotification;
+        RevealSeconds = other.RevealSeconds;
+        WindowX = other.WindowX;
+        WindowY = other.WindowY;
+
+        SelectedList = other.SelectedList;
+        DrawnThisRound = new List<string>(other.DrawnThisRound);
+        RecentPicks = new List<string>(other.RecentPicks);
+        LastPicked = other.LastPicked;
+
+        CameraDeviceId = other.CameraDeviceId;
+        CameraDeviceName = other.CameraDeviceName;
+        CameraKeepAliveSeconds = other.CameraKeepAliveSeconds;
+        FaceScoreThreshold = other.FaceScoreThreshold;
+        UseTiledDetection = other.UseTiledDetection;
+        TileGrid = other.TileGrid;
+        PhotoAvoidRecent = other.PhotoAvoidRecent;
+        PhotoTextChance = other.PhotoTextChance;
+        SeparateTextRoster = other.SeparateTextRoster;
+        CropWidthFactor = other.CropWidthFactor;
+        CropHeightFactor = other.CropHeightFactor;
+        SavePhotos = other.SavePhotos;
+    }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

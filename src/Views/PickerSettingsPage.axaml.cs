@@ -217,12 +217,12 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
             {
                 return Settings.IsNoRepeat
                     ? $"共 {_service.GroupTotal} 组，本轮还剩 {_service.GroupsRemaining} 组。"
-                    : $"共 {_service.GroupTotal} 组。放回模式下没有轮次概念。";
+                    : $"共 {_service.GroupTotal} 组。放回模式下重置的是降权记录。";
             }
 
             return Settings.IsNoRepeat
                 ? $"共 {_service.RosterCount} 人，本轮还剩 {_service.RemainingInRound} 人。"
-                : $"共 {_service.RosterCount} 人。放回模式下没有轮次概念。";
+                : $"共 {_service.RosterCount} 人。放回模式下重置的是降权记录。";
         }
     }
 

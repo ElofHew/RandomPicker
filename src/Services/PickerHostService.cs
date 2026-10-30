@@ -104,7 +104,7 @@ public class PickerHostService : IHostedService
         _textRoster = null;
 
         _roster?.SwitchTo(_library.PathOf(slot));
-        _window?.RefreshCounter();
+        _window?.RefreshTotals();
         SaveSettingsInternal();
     }
 
@@ -157,7 +157,11 @@ public class PickerHostService : IHostedService
         _window = new PickerWindow(_settings, _roster, _library);
         _window.PickRequested += (_, _) => Pick();
         _window.SettingsChanged += (_, _) => SaveSettingsInternal();
+        // 范围变了（换来源 / 换名单 / 换放回模式）才存盘，窗口自己会重算显示。
+        _window.PoolChanged += (_, _) => SaveSettingsInternal();
         _window.ListChangeRequested += (_, slot) => SwitchList(slot);
+        _window.RoundResetRequested += (_, _) => ResetRound();
+        _window.RefreshRequested += (_, _) => RefreshState();
         _window.Show();
     }
 
@@ -320,19 +324,56 @@ public class PickerHostService : IHostedService
     /// <summary>本轮还剩几个组没抽到。放回模式下等于总组数。</summary>
     public int GroupsRemaining => GroupPicker.RemainingInRound(_settings);
 
-    /// <summary>重新读一遍名单文件。</summary>
+    /// <summary>重新读一遍当前名单文件。</summary>
     public void ReloadRoster()
     {
         _roster?.Reload();
-        _window?.RefreshCounter();
+        _window?.RefreshTotals();
     }
 
-    /// <summary>清空本轮记录，提前开始新一轮。名单和小组一起清。</summary>
+    /// <summary>
+    /// 「重置本轮」——不放回清轮次记录，放回清降权记录。文案两种模式一样。
+    /// </summary>
+    /// <remarks>分流规则见 <see cref="PickerSettings.ResetRound"/>，菜单和设置页调的是同一处。</remarks>
     public void ResetRound()
     {
-        RosterService.ResetRound(_settings);
-        GroupPicker.ResetRound(_settings);
-        _window?.RefreshCounter();
+        _settings.ResetRound();
+        _window?.RefreshTotals();
+        SaveSettingsInternal();
+    }
+
+    /// <summary>
+    /// 从磁盘把整个插件重读一遍：设置、名单、摄像头，然后再刷一遍界面。
+    /// </summary>
+    /// <remarks>
+    /// 右键菜单的「刷新插件状态」。用途是<b>把插件拽回已知状态</b>，不是日常操作：
+    /// <list type="bullet">
+    /// <item>手动改过 <c>settings.json</c>，或者从别的机器拷了一份过来；</item>
+    /// <item>名单是在文件监视没起作用的时候被改的（网络盘、被别的程序独占过）；</item>
+    /// <item>摄像头被占住、抽不出图，只能靠重开来放掉句柄；</item>
+    /// <item>装完新版本发现某个新设置项没生效。</item>
+    /// </list>
+    /// 设置是<b>就地覆盖</b>（<see cref="PickerSettings.CopyFrom"/>）而不是换对象——
+    /// 悬浮球和设置页都攥着同一个实例，换对象会让它们手里的引用作废。
+    /// </remarks>
+    public void RefreshState()
+    {
+        _settings.CopyFrom(PickerSettings.Load(_settingsPath));
+
+        // 名单序号可能被改过；SwitchTo 对同一份文件会直接返回，所以后面再 Refresh 一次
+        // （那条路会把文件监视器也重开，监视器死掉的情况就是靠这个救回来的）。
+        _roster?.SwitchTo(_library.PathOf(_settings.SelectedList));
+        _roster?.Refresh();
+
+        // 文字抽选那份按新设置重建，省得算它该不该存在。
+        _textRoster?.Dispose();
+        _textRoster = null;
+
+        // 摄像头可能正被占着，放掉句柄，下次抽重新打开。
+        _ = CameraPicker.DisposeAllAsync();
+
+        _window?.ApplySize();
+        _window?.RefreshTotals();
         SaveSettingsInternal();
     }
 

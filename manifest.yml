@@ -2,7 +2,7 @@ entranceAssembly: ClassIsland.RandomPicker.dll
 name: 随机抽选
 id: gordon.randompicker
 description: 一个桌面上的随机抽选悬浮球，支持拍照抽人、随机抽人、随机抽组，提供多个名单空间、单次多抽、放回式和不放回式等功能。
-version: 2.0.0.0
+version: 2.2.2.2
 apiVersion: 2.0.0.0
 author: GordonYoung & ElofHew
 icon: icon.png

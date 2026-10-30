@@ -321,6 +321,14 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xED2F;}"
+                                       Header="幽灵人"
+                                       Description="{Binding GhostSummary}">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding GhostMode, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
         </StackPanel>
     </ScrollViewer>
 </ci:SettingsPageBase>

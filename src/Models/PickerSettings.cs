@@ -154,6 +154,18 @@ public class PickerSettings
     /// </remarks>
     public int DisplayCount(int actual) => Math.Max(0, actual + CountOffset);
 
+    /// <summary>
+    /// 启用幽灵人：名单里以 <c>%</c> 开头的名字<b>照常计入人数，但永远不会被抽中</b>。
+    /// </summary>
+    /// <remarks>
+    /// 关掉时这些名字就是普通人——<c>%</c> 前缀只在文件里有意义，
+    /// 抽出来和显示时都会被去掉，界面上看不到那个符号。
+    /// <para/>
+    /// 人数之所以要照算，是这个功能的全部意义：从名单里划掉几个人，
+    /// 球上的总数却不能跟着变小，否则一眼就露了。
+    /// </remarks>
+    public bool GhostMode { get; set; }
+
     /// <summary>悬浮球大小档位。</summary>
     public PickerSize Size { get; set; } = PickerSize.Medium;
 
@@ -415,6 +427,7 @@ public class PickerSettings
         Size = other.Size;
         ShowPickerCount = other.ShowPickerCount;
         CountOffset = other.CountOffset;
+        GhostMode = other.GhostMode;
         Hidden = other.Hidden;
         ShowCenterReveal = other.ShowCenterReveal;
         ShowNotification = other.ShowNotification;

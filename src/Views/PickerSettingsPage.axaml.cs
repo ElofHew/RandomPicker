@@ -468,6 +468,44 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
         }
     }
 
+    /// <summary>
+    /// 幽灵人：名单里 <c>%</c> 开头的名字算人数但不参与抽取。
+    /// </summary>
+    public bool GhostMode
+    {
+        get => Settings.GhostMode;
+        set
+        {
+            if (value == Settings.GhostMode)
+            {
+                return;
+            }
+
+            Settings.GhostMode = value;
+            _service?.RefreshPickerWindow();
+            Save(nameof(GhostMode), nameof(GhostSummary), nameof(RosterSummary), nameof(RoundSummary));
+        }
+    }
+
+    public string GhostSummary
+    {
+        get
+        {
+            var ghosts = _service?.GhostCount ?? 0;
+
+            if (!Settings.GhostMode)
+            {
+                return ghosts > 0
+                    ? $"关闭。名单里那 {ghosts} 个 % 开头的名字照常参与抽取。"
+                    : "关闭。要给谁挂幽灵，在名单里他名字前面加个 % 就行。";
+            }
+
+            return ghosts > 0
+                ? $"已启用。{ghosts} 个幽灵人计入人数，但永远抽不到。"
+                : "已启用。名单里还没有以 % 开头的名字。";
+        }
+    }
+
     #endregion
 
     #region 摄像头

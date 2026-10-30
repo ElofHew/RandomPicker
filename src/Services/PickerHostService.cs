@@ -315,6 +315,9 @@ public class PickerHostService : IHostedService
     /// <summary>名单里有多少人。</summary>
     public int RosterCount => _roster?.Names.Count ?? 0;
 
+    /// <summary>名单里有多少个幽灵人（<c>%</c> 开头的那几行）。</summary>
+    public int GhostCount => _roster?.GhostCount ?? 0;
+
     /// <summary>本轮还剩多少人没抽到。放回模式下没有轮次概念，等于总人数。</summary>
     public int RemainingInRound => _roster?.RemainingInRound(_settings) ?? 0;
 
@@ -545,7 +548,13 @@ public class PickerHostService : IHostedService
         if (names.Count == 0)
         {
             // 名单是空的——与其静悄悄什么都不发生，不如直接把话说清楚。
-            Reveal(note is null ? "名单是空的" : note, isHint: true);
+            // 还有一种空法：名单里全是幽灵人，那和「空」是两回事，得分开说，
+            // 否则用户会去查文件有没有保存。
+            var message = TextRoster.Names.Count > 0 && _settings.GhostMode
+                ? "名单里只剩幽灵人了"
+                : "名单是空的";
+
+            Reveal(note ?? message, isHint: true);
             return;
         }
 

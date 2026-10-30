@@ -17,15 +17,25 @@ namespace ClassIsland.RandomPicker.Services;
 /// <para/>
 /// 还有一种特殊行：<c>@高一5班</c> —— 给这份名单起个名字，用在菜单和设置页上。
 /// 它不算人名，也不会被抽到。
+/// <para/>
+/// 以 <c>%</c> 开头的是「幽灵人」：<c>%张三</c> 计入人数，但在
+/// <see cref="PickerSettings.GhostMode"/> 开着时永远抽不到。前缀只是文件里的记号，
+/// 存进名单时已经去掉，界面上看到的就是「张三」。
 /// </remarks>
 public class RosterService
 {
     /// <summary>起名行的开头，后面直接跟名字。</summary>
     private const char TitleStart = '@';
 
+    /// <summary>幽灵人的记号，后面直接跟名字。</summary>
+    private const char GhostStart = '%';
+
     private string _rosterPath;
     private FileSystemWatcher? _watcher;
     private List<string> _names = new();
+
+    /// <summary>哪些名字是从 <c>%</c> 行来的。存的是去掉前缀之后的名字。</summary>
+    private readonly HashSet<string> _ghosts = new(StringComparer.Ordinal);
 
     public RosterService(string rosterPath)
     {
@@ -40,6 +50,20 @@ public class RosterService
 
     /// <summary>当前名单。</summary>
     public IReadOnlyList<string> Names => _names;
+
+    /// <summary>名单里有几个幽灵人（<c>%</c> 开头的那几行）。</summary>
+    public int GhostCount => _ghosts.Count;
+
+    /// <summary>名字是不是幽灵人。判断的是去掉前缀之后的名字。</summary>
+    public bool IsGhost(string name) => _ghosts.Contains(name);
+
+    /// <summary>按当前设置，这个人能不能抽。</summary>
+    /// <remarks>幽灵人只在开关打开时排除；关着的时候它们就是普通人。</remarks>
+    private bool CanPick(string name, PickerSettings settings) =>
+        !settings.GhostMode || !_ghosts.Contains(name);
+
+    /// <summary>按当前设置，实际可抽的人数。幽灵人被排除时比 <see cref="Names"/> 少。</summary>
+    public int PickableCount(PickerSettings settings) => _names.Count(x => CanPick(x, settings));
 
     /// <summary>名单自己声明的名字（<c>@…</c> 那一行）。没写过就是 <c>null</c>。</summary>
     public string? Title { get; private set; }
@@ -116,6 +140,12 @@ public class RosterService
                 continue;
             }
 
+            // 光一个 % 不算名字，别让一份只有它的文件看着「有内容」。
+            if (line.StartsWith(GhostStart) && line[1..].Trim().Length == 0)
+            {
+                continue;
+            }
+
             return true;
         }
 
@@ -176,7 +206,10 @@ public class RosterService
                 : [];
 
             string? title = null;
-            var names = new List<string>();
+
+            // 先按行收，最后再统一去重：同名的一行带 %、一行不带时，要以「不带」为准
+            // （他既然后面写了真名，就说明这个人是要被抽的）。
+            var entries = new List<(string Name, bool Ghost)>();
 
             foreach (var raw in lines)
             {
@@ -200,11 +233,34 @@ public class RosterService
                     continue;
                 }
 
-                names.Add(line);
+                if (line.StartsWith(GhostStart))
+                {
+                    // 光一个 % 后面什么都没有，算写坏了，不留。
+                    var ghost = line[1..].Trim();
+                    if (ghost.Length > 0)
+                    {
+                        entries.Add((ghost, true));
+                    }
+
+                    continue;
+                }
+
+                entries.Add((line, false));
             }
 
             Title = title;
-            _names = names.Distinct(StringComparer.Ordinal).ToList();
+            _names = entries.Select(x => x.Name).Distinct(StringComparer.Ordinal).ToList();
+
+            _ghosts.Clear();
+            var real = new HashSet<string>(
+                entries.Where(x => !x.Ghost).Select(x => x.Name), StringComparer.Ordinal);
+            foreach (var (name, ghost) in entries)
+            {
+                if (ghost && !real.Contains(name))
+                {
+                    _ghosts.Add(name);
+                }
+            }
         }
         catch (IOException)
         {
@@ -342,8 +398,12 @@ public class RosterService
             return picked;
         }
 
-        // 一次抽不了比名单还多的人。
-        count = Math.Min(count, _names.Count);
+        // 一次抽不了比能抽的人还多。幽灵人算进总人数，但不在这一批的范围里。
+        count = Math.Min(count, PickableCount(settings));
+        if (count <= 0)
+        {
+            return picked;
+        }
 
         if (settings.IsNoRepeat)
         {
@@ -396,7 +456,9 @@ public class RosterService
     {
         for (var i = 0; i < count; i++)
         {
-            var pool = _names.Where(x => !picked.Contains(x)).ToList();
+            var pool = _names
+                .Where(x => CanPick(x, settings) && !picked.Contains(x))
+                .ToList();
             if (pool.Count == 0)
             {
                 break;
@@ -408,9 +470,11 @@ public class RosterService
         }
     }
 
-    /// <summary>本轮还没抽到的人。</summary>
+    /// <summary>本轮还没抽到的人。幽灵人不算——它们本来就不参与轮次。</summary>
     private List<string> Undrawn(PickerSettings settings) =>
-        _names.Where(x => !settings.DrawnThisRound.Contains(x, StringComparer.Ordinal)).ToList();
+        _names.Where(x => CanPick(x, settings) &&
+                          !settings.DrawnThisRound.Contains(x, StringComparer.Ordinal))
+              .ToList();
 
     /// <summary>
     /// 开新一轮：清空本轮记录，并把上一轮最后一个人挡在门外。
@@ -423,7 +487,9 @@ public class RosterService
     {
         settings.DrawnThisRound.Clear();
 
-        var remaining = _names.Where(x => !picked.Contains(x)).ToList();
+        var remaining = _names
+            .Where(x => CanPick(x, settings) && !picked.Contains(x))
+            .ToList();
 
         if (remaining.Count > 1 && settings.LastPicked is { } last)
         {
@@ -433,7 +499,14 @@ public class RosterService
         return remaining;
     }
 
-    /// <summary>本轮还剩多少人没抽到。</summary>
+    /// <summary>
+    /// 本轮还剩多少人没抽到。
+    /// </summary>
+    /// <remarks>
+    /// <b>幽灵人算在里面。</b>它们本来就是为了让总数看起来没动过，
+    /// 这里要是把它们减掉，球上开局就会显示「25/30」，比不藏还明显。
+    /// 代价是全部真人抽完之后还剩几个永远抽不到的，得靠「重置本轮」或下一次自动开新轮。
+    /// </remarks>
     public int RemainingInRound(PickerSettings settings)
     {
         if (!settings.IsNoRepeat)

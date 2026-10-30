@@ -104,7 +104,7 @@ public class PickerHostService : IHostedService
         _textRoster = null;
 
         _roster?.SwitchTo(_library.PathOf(slot));
-        _window?.RefreshTotals();
+        _window?.RefreshCounter();
         SaveSettingsInternal();
     }
 
@@ -328,7 +328,7 @@ public class PickerHostService : IHostedService
     public void ReloadRoster()
     {
         _roster?.Reload();
-        _window?.RefreshTotals();
+        _window?.RefreshCounter();
     }
 
     /// <summary>
@@ -338,7 +338,7 @@ public class PickerHostService : IHostedService
     public void ResetRound()
     {
         _settings.ResetRound();
-        _window?.RefreshTotals();
+        _window?.RefreshCounter();
         SaveSettingsInternal();
     }
 
@@ -373,7 +373,7 @@ public class PickerHostService : IHostedService
         _ = CameraPicker.DisposeAllAsync();
 
         _window?.ApplySize();
-        _window?.RefreshTotals();
+        _window?.RefreshCounter();
         SaveSettingsInternal();
     }
 

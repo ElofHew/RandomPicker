@@ -50,15 +50,6 @@ public class PickerWindow : Window
     /// <summary>设置菜单。复用同一个实例，每次打开前换 ItemsSource。</summary>
     private MenuFlyout? _menu;
 
-    /// <summary>
-    /// 菜单顶上「共 N 人 / 共 N 组」那一项。
-    /// </summary>
-    /// <remarks>
-    /// 留着引用是为了能就地改字：菜单开着的时候状态被改（比如从设置页切了名单），
-    /// 只重建菜单不够——那个菜单已经关掉了。为空表示当前没开菜单或还没建过。
-    /// </remarks>
-    private MenuItem? _totalItem;
-
     /// <summary>当前被本窗口捕获的指针。长按弹菜单前要把它放掉。</summary>
     private IPointer? _capturedPointer;
 
@@ -153,8 +144,8 @@ public class PickerWindow : Window
 
         _roster.RosterChanged += (_, _) => Dispatcher.UIThread.Post(RefreshCounter);
 
-        // 范围一变就自己重算一遍；宿主另外会订阅同一个事件去存盘。
-        PoolChanged += (_, _) => RefreshTotals();
+        // 范围一变就自己重算一遍球上的字；宿主另外会订阅同一个事件去存盘。
+        PoolChanged += (_, _) => RefreshCounter();
     }
 
     /// <summary>用户请求抽一次（抽人或抽组）。</summary>
@@ -167,9 +158,8 @@ public class PickerWindow : Window
     /// 能抽的东西变了：换来源（人 / 组 / 拍照）、换放回模式、换名单。
     /// </summary>
     /// <remarks>
-    /// 这些改动都会影响「共 N 人 / 共 N 组」，所以订阅方要重算一遍——
-    /// 窗口自己重算球上的字和菜单顶上那行，宿主顺手存盘。
-    /// 换名字不算，那是文本层面的事，范围没变。
+    /// 这些改动都会影响球上那行小字（剩余人数、放回模式、拍照），所以订阅方要重算一遍——
+    /// 窗口自己刷字，宿主顺手存盘。换名单标题不算，那是文本层面的事，范围没变。
     /// </remarks>
     public event EventHandler? PoolChanged;
 
@@ -216,23 +206,6 @@ public class PickerWindow : Window
         _label.FontSize = d * 0.30;
         _counter.FontSize = d * 0.155;
         ClampToScreen();
-    }
-
-    /// <summary>
-    /// 把「有多少可抽」相关的显示一起重算：球上那行字，以及菜单顶上的总数。
-    /// </summary>
-    /// <remarks>
-    /// 换来源、换名单、换放回模式都会走到这里。菜单开着的时候直接改那一项的文字，
-    /// 因为重建菜单得等下次打开，用户会觉得点了没反应。
-    /// </remarks>
-    public void RefreshTotals()
-    {
-        RefreshCounter();
-
-        if (_totalItem is not null)
-        {
-            _totalItem.Header = TotalText();
-        }
     }
 
     /// <summary>刷新圆钮上的那行小字。</summary>
@@ -555,16 +528,12 @@ public class PickerWindow : Window
     private const string ListGroup = "picker.list";
 
     /// <summary>
-    /// 菜单内容。每次打开都重新构建，勾选状态和总数才是当前的。
+    /// 菜单内容。每次打开都重新构建，勾选状态才是当前的。
     /// </summary>
     private object[] BuildMenuItems()
     {
-        // 顶上那一行要能就地改（换名单 / 换来源时 RefreshTotals 直接换字），所以留个引用。
-        _totalItem = Header(TotalText());
-
         object[] items =
         [
-            _totalItem,
             Item("抽一个", () => PickRequested?.Invoke(this, EventArgs.Empty)),
             new Separator(),
 
@@ -638,29 +607,6 @@ public class PickerWindow : Window
 
         WireRadioGroups(items);
         return items;
-    }
-
-    /// <summary>
-    /// 菜单顶上那行的总数，跟着「当前抽什么」走。
-    /// </summary>
-    /// <remarks>
-    /// 抽组时是组数、抽人时是<b>当前这份名单</b>的人数——换名单、改组数都会立刻反映出来，
-    /// 因为菜单每次打开都重新构建，这里读的也都是活数据。
-    /// <para/>
-    /// 拍照抽人不显示数字：抽的范围是拍到的画面，人数得等按下快门才知道，
-    /// 这时候写「共 30 人」会让人以为还是按名单在抽。
-    /// </remarks>
-    private string TotalText()
-    {
-        switch (_settings.Mode)
-        {
-            case PickMode.Photo:
-                return "拍照抽人（不读名单）";
-            case PickMode.Group:
-                return $"共 {GroupPicker.Labels(_settings).Count} 组";
-            default:
-                return $"共 {_roster.Names.Count} 人";
-        }
     }
 
     /// <summary>
@@ -825,8 +771,6 @@ public class PickerWindow : Window
         item.Click += (_, _) => action();
         return item;
     }
-
-    private static MenuItem Header(string text) => new() { Header = text, IsEnabled = false };
 
     /// <summary>
     /// 切换抽人来源：拍照、随机抽人、随机抽组。

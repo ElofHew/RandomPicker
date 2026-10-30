@@ -60,7 +60,14 @@ cipx/checksums.md                     MD5，格式同官方 PluginSdk 的 genera
 并且用 `pkg.GetEntry("manifest.yml")` 取清单。所以：
 
 - **所有文件必须在 zip 根目录**，绝对不能套一层文件夹——装不上的绝大多数原因都是这个；
-- 必须有根目录的 `manifest.yml`。脚本打完会重新打开 zip 自检这一点。
+- 必须有根目录的 `manifest.yml`。脚本打完会重新打开 zip 自检这一点，
+  并且**逐字比对包里的清单和仓库根目录那份**，对不上直接报错。
+
+**清单一定要从仓库根目录现拷，不能让构建缓存替你做决定。** MSBuild 复制 `None` 文件时会把
+源文件的时间戳一起带过去，`PreserveNewest` 于是可能误判「输出比源新」而跳过复制，
+结果是改完版本号打包出来还是上一版。实测踩过：`manifest.yml` 写 2.0.0.0，
+包里躺着 1.1.0.0，装上去一切正常、只有版本号不对。所以 csproj 里那三个 `Link` 文件都设成
+`CopyToOutputDirectory="Always"`，`build.ps1` 在第 2 步还会无条件再同步一遍。
 
 `Compress-Archive` 只接受 `.zip` 后缀，所以脚本先压成 zip 再改名。
 

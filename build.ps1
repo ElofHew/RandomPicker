@@ -84,7 +84,20 @@ else {
 $OutDir = Join-Path $ProjectDir "bin/$Configuration/$Tfm"
 if (-not (Test-Path $OutDir)) { throw "找不到输出目录：$OutDir" }
 
-# ---------------------------------------------------------------- 2. 收集打包内容
+# ---------------------------------------------------------------- 2. 同步元数据
+
+# 清单 / 图标 / 说明在仓库根目录，csproj 用 Link 复制到输出目录。但 MSBuild 的复制会带
+# 时间戳，判断「输出比源新」时可能误判，于是跳过复制 —— 打出来的包里还是上一版清单。
+# 实测踩过：manifest.yml 改成 2.0.0.0，包里躺着的却是 1.1.0.0。
+# 这里无条件再同步一次，-SkipBuild 时也照样生效。
+foreach ($meta in @("manifest.yml", "README.md", "icon.png")) {
+    $metaSrc = Join-Path $PSScriptRoot $meta
+    if (Test-Path $metaSrc) {
+        Copy-Item -LiteralPath $metaSrc -Destination (Join-Path $OutDir $meta) -Force
+    }
+}
+
+# ---------------------------------------------------------------- 3. 收集打包内容
 
 # .cipx 就是一个普通 zip，宿主安装时整个解压到 Plugins/<id>/ 下，
 # 并且用 pkg.GetEntry("manifest.yml") 取清单 —— 所以所有文件必须在 zip 根目录，不能有外层文件夹。
@@ -121,7 +134,7 @@ foreach ($name in $Include) {
 }
 if ($Missing.Count -gt 0) { throw "输出目录缺少以下文件，无法打包：$($Missing -join ', ')" }
 
-# ---------------------------------------------------------------- 3. 打 zip
+# ---------------------------------------------------------------- 4. 打 zip
 
 $CipxDir  = Join-Path $PSScriptRoot "cipx"
 $CipxPath = Join-Path $CipxDir "$ProjectName.cipx"
@@ -135,7 +148,7 @@ $ZipPath = Join-Path $CipxDir "$ProjectName.zip"
 Compress-Archive -LiteralPath $Paths -DestinationPath $ZipPath -CompressionLevel Optimal
 Move-Item -Path $ZipPath -Destination $CipxPath -Force
 
-# ---------------------------------------------------------------- 4. 自检
+# ---------------------------------------------------------------- 5. 自检
 
 # 再打开一次，确认清单真的在 zip 根目录 —— 装不上的绝大多数原因就是它被套了一层文件夹。
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -145,12 +158,24 @@ try {
     if ($entries -notcontains "manifest.yml") {
         throw "打包结果里没有根目录的 manifest.yml，宿主将无法识别这个插件。"
     }
+
+    # 包里的清单必须就是仓库里那份。版本号打错是最难发现的问题之一：
+    # 装上去看着一切正常，只有插件列表里的版本号不对。这里直接比字节。
+    $manifestEntry = $zip.GetEntry("manifest.yml")
+    $reader = New-Object System.IO.StreamReader($manifestEntry.Open(), [System.Text.Encoding]::UTF8)
+    try { $packedManifest = $reader.ReadToEnd() } finally { $reader.Dispose() }
+
+    $sourceManifest = Get-Content (Join-Path $PSScriptRoot "manifest.yml") -Raw -Encoding UTF8
+    if ($packedManifest.Replace("`r`n", "`n").TrimEnd() -ne $sourceManifest.Replace("`r`n", "`n").TrimEnd()) {
+        throw "包里的 manifest.yml 和仓库根目录那份不一致（多半是输出了旧副本）。删掉 src/bin 和 src/obj 再打一次。"
+    }
+
     Write-Host "    包含 $(@($entries).Count) 个条目：" -ForegroundColor DarkGray
     foreach ($e in $entries) { Write-Host "      - $e" -ForegroundColor DarkGray }
 }
 finally { $zip.Dispose() }
 
-# ---------------------------------------------------------------- 5. 校验和
+# ---------------------------------------------------------------- 6. 校验和
 
 # 和官方 PluginSdk 的 generate-md5.ps1 保持一致：往 checksums.md 里写一段带 JSON 的 HTML 注释，
 # 插件市场用它校验下载到的包。
@@ -159,7 +184,7 @@ $json = ConvertTo-Json @{(Split-Path $CipxPath -Leaf) = $hash} -Compress
 Set-Content -Path (Join-Path $CipxDir "checksums.md") `
             -Value "`n<!-- CLASSISLAND_PKG_MD5 $json -->" -Encoding UTF8
 
-# ---------------------------------------------------------------- 6. 收尾
+# ---------------------------------------------------------------- 7. 收尾
 
 $sizeMb = [math]::Round((Get-Item $CipxPath).Length / 1MB, 2)
 Write-Host ""

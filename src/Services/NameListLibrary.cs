@@ -22,14 +22,25 @@ public sealed class NameListLibrary
     public const string FolderName = "namelib";
 
     private readonly string _folder;
+    private readonly string _configFolder;
 
     public NameListLibrary(string configFolder)
     {
+        _configFolder = configFolder;
         _folder = Path.Combine(configFolder, FolderName);
     }
 
     /// <summary>名单目录。</summary>
     public string FolderPath => _folder;
+
+    /// <summary>
+    /// 排除名单（<c>except.json</c>）的位置：配置目录根部，也就是老「名单.txt」待过的那个目录。
+    /// </summary>
+    /// <remarks>
+    /// 故意<b>不</b>放在 <c>namelib/</c> 里：打开名单文件时翻不到它，
+    /// 名单本身也能保持干净，不被 <c>%</c> 这种记号暴露。
+    /// </remarks>
+    public string ExceptPath => Path.Combine(_configFolder, "except.json");
 
     /// <summary>第 <paramref name="slot"/> 份名单的文件路径（从 1 起算）。</summary>
     public string PathOf(int slot) => Path.Combine(_folder, $"list{Clamp(slot)}.txt");

@@ -492,17 +492,19 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
         get
         {
             var ghosts = _service?.GhostCount ?? 0;
+            var fromExcept = _service?.ExceptGhostCount ?? 0;
+            var exceptNote = fromExcept > 0 ? $"（其中 {fromExcept} 个来自 except.json）" : "";
 
             if (!Settings.GhostMode)
             {
                 return ghosts > 0
-                    ? $"关闭。名单里那 {ghosts} 个 % 开头的名字照常参与抽取。"
+                    ? $"关闭。名单里那 {ghosts} 个幽灵人照常参与抽取{exceptNote}。"
                     : "关闭。要给谁挂幽灵，在名单里他名字前面加个 % 就行。";
             }
 
             return ghosts > 0
-                ? $"已启用。{ghosts} 个幽灵人计入人数，但永远抽不到。"
-                : "已启用。名单里还没有以 % 开头的名字。";
+                ? $"已启用。{ghosts} 个幽灵人计入人数，但永远抽不到{exceptNote}。"
+                : "已启用。名单里还没有幽灵人。";
         }
     }
 

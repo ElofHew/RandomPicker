@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using ClassIsland.RandomPicker.Models;
 
 namespace ClassIsland.RandomPicker.Services;
@@ -37,9 +38,18 @@ public class RosterService
     /// <summary>哪些名字是从 <c>%</c> 行来的。存的是去掉前缀之后的名字。</summary>
     private readonly HashSet<string> _ghosts = new(StringComparer.Ordinal);
 
-    public RosterService(string rosterPath)
+    /// <summary>
+    /// <c>except.json</c> 的路径。为空表示这份名单不吃外部排除表。
+    /// </summary>
+    private readonly string? _exceptPath;
+
+    /// <summary>这套排除规则是从 <c>except.json</c> 里来的名字数量（不含 <c>%</c> 行）。</summary>
+    private int _exceptGhostCount;
+
+    public RosterService(string rosterPath, string? exceptPath = null)
     {
         _rosterPath = rosterPath;
+        _exceptPath = exceptPath;
         EnsureRosterFile();
         Reload();
         StartWatching();
@@ -53,6 +63,12 @@ public class RosterService
 
     /// <summary>名单里有几个幽灵人（<c>%</c> 开头的那几行）。</summary>
     public int GhostCount => _ghosts.Count;
+
+    /// <summary>
+    /// 其中来自 <c>except.json</c> 的有几个。
+    /// </summary>
+    /// <remarks>名单文件里看不到这些人，所以设置页要单独报一下，否则用户会以为文件被改了。</remarks>
+    public int ExceptGhostCount => _exceptGhostCount;
 
     /// <summary>名字是不是幽灵人。判断的是去掉前缀之后的名字。</summary>
     public bool IsGhost(string name) => _ghosts.Contains(name);
@@ -261,12 +277,106 @@ public class RosterService
                     _ghosts.Add(name);
                 }
             }
+
+            // 外部排除表盖在 % 之上：这是用户专门写下来要排除的人，
+            // 就算名单里同时有一行不带 % 的真名，也按排除算。
+            _exceptGhostCount = 0;
+            foreach (var name in LoadExclusions(_exceptPath, _rosterPath, title))
+            {
+                if (_names.Contains(name, StringComparer.Ordinal) && _ghosts.Add(name))
+                {
+                    _exceptGhostCount++;
+                }
+            }
         }
         catch (IOException)
         {
             // 多半是保存的瞬间被占用了，保留上一次的名单，下一次变更再读。
         }
     }
+
+    /// <summary>
+    /// 读 <c>except.json</c>，挑出跟这份名单有关的那份排除名单。
+    /// </summary>
+    /// <param name="exceptPath">文件位置，为空或不存在都当没配。</param>
+    /// <param name="rosterPath">当前名单文件，用来按文件名匹配。</param>
+    /// <param name="title">名单自己声明的名字，用来按名字匹配。</param>
+    /// <remarks>
+    /// 键可以是文件名（<c>list2.txt</c> / 不带后缀的 <c>list2</c>），也可以是名单名（<c>高一5班</c>）。
+    /// 两种都认，是因为人有两种记法：没起名的名单只有文件名可写，起了名的用名字更直观。
+    /// <para/>
+    /// 键和名字都按不区分大小写比：这是配置，不是内容，写错大小写不该静默失效。
+    /// 文件读坏了就当没配，不能让一段坏 JSON 把名单也搞没。
+    /// </remarks>
+    private static HashSet<string> LoadExclusions(string? exceptPath, string rosterPath, string? title)
+    {
+        var excluded = new HashSet<string>(StringComparer.Ordinal);
+
+        if (string.IsNullOrEmpty(exceptPath) || !File.Exists(exceptPath))
+        {
+            return excluded;
+        }
+
+        Dictionary<string, List<string>>? table;
+        try
+        {
+            table = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(
+                File.ReadAllText(exceptPath), ExceptJsonOptions);
+        }
+        catch (Exception)
+        {
+            // 坏了、写了一半、被独占，都当没配。下次刷新插件状态会重读。
+            return excluded;
+        }
+
+        if (table is null)
+        {
+            return excluded;
+        }
+
+        var file = Path.GetFileName(rosterPath);
+        var stem = Path.GetFileNameWithoutExtension(rosterPath);
+
+        foreach (var (key, names) in table)
+        {
+            if (names is null || !KeyMatches(key, file, stem, title))
+            {
+                continue;
+            }
+
+            foreach (var raw in names)
+            {
+                var name = raw?.Trim();
+                if (!string.IsNullOrEmpty(name))
+                {
+                    excluded.Add(name);
+                }
+            }
+        }
+
+        return excluded;
+    }
+
+    private static bool KeyMatches(string key, string file, string stem, string? title)
+    {
+        var k = key.Trim();
+        if (k.Length == 0)
+        {
+            return false;
+        }
+
+        return string.Equals(k, file, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(k, stem, StringComparison.OrdinalIgnoreCase)
+               || (!string.IsNullOrWhiteSpace(title) &&
+                   string.Equals(k, title.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary><c>except.json</c> 的读法：允许注释和末尾逗号，人手写的东西别太苛刻。</summary>
+    private static readonly JsonSerializerOptions ExceptJsonOptions = new()
+    {
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
 
     /// <summary>
     /// 认一下这一行是不是「给名单起名」：<c>@名字</c>。

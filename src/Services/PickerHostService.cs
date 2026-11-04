@@ -113,7 +113,7 @@ public class PickerHostService : IHostedService
         _settings = PickerSettings.Load(_settingsPath);
 
         _library.MigrateLegacy(_legacyRosterPath, _legacyTextPath);
-        _roster = new RosterService(_library.PathOf(_settings.SelectedList));
+        _roster = new RosterService(_library.PathOf(_settings.SelectedList), _library.ExceptPath);
 
         // 宿主启动 IHostedService 的时候 Avalonia 主窗口不一定已经就绪，
         // 用 Background 优先级排队，等 UI 空下来再开窗口。
@@ -317,6 +317,9 @@ public class PickerHostService : IHostedService
 
     /// <summary>名单里有多少个幽灵人（<c>%</c> 开头的那几行）。</summary>
     public int GhostCount => _roster?.GhostCount ?? 0;
+
+    /// <summary>其中有多少个是 <c>except.json</c> 指定的（名单文件里看不到的那种）。</summary>
+    public int ExceptGhostCount => _roster?.ExceptGhostCount ?? 0;
 
     /// <summary>本轮还剩多少人没抽到。放回模式下没有轮次概念，等于总人数。</summary>
     public int RemainingInRound => _roster?.RemainingInRound(_settings) ?? 0;
@@ -524,7 +527,7 @@ public class PickerHostService : IHostedService
                 return _roster!;
             }
 
-            _textRoster ??= new RosterService(_library.TextPathOf(_settings.SelectedList));
+            _textRoster ??= new RosterService(_library.TextPathOf(_settings.SelectedList), _library.ExceptPath);
 
             return _textRoster;
         }

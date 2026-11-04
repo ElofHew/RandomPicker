@@ -38,13 +38,13 @@ public class RosterService
     /// <summary>哪些名字是从 <c>%</c> 行来的。存的是去掉前缀之后的名字。</summary>
     private readonly HashSet<string> _ghosts = new(StringComparer.Ordinal);
 
+    /// <summary><c>except.json</c> 点名要排除的名字。和 <c>%</c> 分开放，因为待遇不一样。</summary>
+    private readonly HashSet<string> _excluded = new(StringComparer.Ordinal);
+
     /// <summary>
     /// <c>except.json</c> 的路径。为空表示这份名单不吃外部排除表。
     /// </summary>
     private readonly string? _exceptPath;
-
-    /// <summary>这套排除规则是从 <c>except.json</c> 里来的名字数量（不含 <c>%</c> 行）。</summary>
-    private int _exceptGhostCount;
 
     public RosterService(string rosterPath, string? exceptPath = null)
     {
@@ -61,24 +61,30 @@ public class RosterService
     /// <summary>当前名单。</summary>
     public IReadOnlyList<string> Names => _names;
 
-    /// <summary>名单里有几个幽灵人（<c>%</c> 开头的那几行）。</summary>
+    /// <summary>
+    /// 名单里有几个幽灵人，<b>只数 <c>%</c> 开头的那几行</b>。
+    /// </summary>
+    /// <remarks>
+    /// <c>except.json</c> 里点名的人不算进来——他们连名单文件里都没有痕迹，
+    /// 界面上报个数反而会让人回去翻文件「怎么少了三个人」。
+    /// </remarks>
     public int GhostCount => _ghosts.Count;
 
-    /// <summary>
-    /// 其中来自 <c>except.json</c> 的有几个。
-    /// </summary>
-    /// <remarks>名单文件里看不到这些人，所以设置页要单独报一下，否则用户会以为文件被改了。</remarks>
-    public int ExceptGhostCount => _exceptGhostCount;
-
-    /// <summary>名字是不是幽灵人。判断的是去掉前缀之后的名字。</summary>
+    /// <summary>名字是不是幽灵人（<c>%</c> 行）。判断的是去掉前缀之后的名字。</summary>
     public bool IsGhost(string name) => _ghosts.Contains(name);
 
-    /// <summary>按当前设置，这个人能不能抽。</summary>
-    /// <remarks>幽灵人只在开关打开时排除；关着的时候它们就是普通人。</remarks>
+    /// <summary>
+    /// 按当前设置，这个人能不能抽。
+    /// </summary>
+    /// <remarks>
+    /// 两条来源待遇不同：<c>%</c> 行看 <see cref="PickerSettings.GhostMode"/>（关掉就是普通人）；
+    /// <c>except.json</c> 点名的人<b>始终</b>排除——那份表存在的意义就是「这些人不要抽」，
+    /// 再配一个开关只会让人以为没写对。
+    /// </remarks>
     private bool CanPick(string name, PickerSettings settings) =>
-        !settings.GhostMode || !_ghosts.Contains(name);
+        !_excluded.Contains(name) && (!settings.GhostMode || !_ghosts.Contains(name));
 
-    /// <summary>按当前设置，实际可抽的人数。幽灵人被排除时比 <see cref="Names"/> 少。</summary>
+    /// <summary>按当前设置，实际可抽的人数。被排除的人不算在内。</summary>
     public int PickableCount(PickerSettings settings) => _names.Count(x => CanPick(x, settings));
 
     /// <summary>名单自己声明的名字（<c>@…</c> 那一行）。没写过就是 <c>null</c>。</summary>
@@ -278,14 +284,14 @@ public class RosterService
                 }
             }
 
-            // 外部排除表盖在 % 之上：这是用户专门写下来要排除的人，
-            // 就算名单里同时有一行不带 % 的真名，也按排除算。
-            _exceptGhostCount = 0;
+            // 外部排除表：始终生效，不受「幽灵人」开关影响。
+            // 名单里没有的名字忽略掉——那张表是按班写的，换一份名单就未必有这些人。
+            _excluded.Clear();
             foreach (var name in LoadExclusions(_exceptPath, _rosterPath, title))
             {
-                if (_names.Contains(name, StringComparer.Ordinal) && _ghosts.Add(name))
+                if (_names.Contains(name, StringComparer.Ordinal))
                 {
-                    _exceptGhostCount++;
+                    _excluded.Add(name);
                 }
             }
         }

@@ -491,20 +491,20 @@ public partial class PickerSettingsPage : SettingsPageBase, INotifyPropertyChang
     {
         get
         {
+            // 只数 % 开头的那几个。except.json 里点名的人不进这个数字——
+            // 界面上多说一句「其中几个来自配置」，等于把藏在外面的人也报了出来。
             var ghosts = _service?.GhostCount ?? 0;
-            var fromExcept = _service?.ExceptGhostCount ?? 0;
-            var exceptNote = fromExcept > 0 ? $"（其中 {fromExcept} 个来自 except.json）" : "";
 
             if (!Settings.GhostMode)
             {
                 return ghosts > 0
-                    ? $"关闭。名单里那 {ghosts} 个幽灵人照常参与抽取{exceptNote}。"
+                    ? $"关闭。名单里那 {ghosts} 个 % 开头的名字照常参与抽取。"
                     : "关闭。要给谁挂幽灵，在名单里他名字前面加个 % 就行。";
             }
 
             return ghosts > 0
-                ? $"已启用。{ghosts} 个幽灵人计入人数，但永远抽不到{exceptNote}。"
-                : "已启用。名单里还没有幽灵人。";
+                ? $"已启用。{ghosts} 个幽灵人计入人数，但永远抽不到。"
+                : "已启用。名单里还没有 % 开头的名字。";
         }
     }
 
